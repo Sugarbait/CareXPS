@@ -1,3 +1,4 @@
+import { TENANT_ID } from '@/config/tenantConfig'
 import React, { useState } from 'react'
 import { ShieldCheckIcon, EyeIcon, EyeOffIcon, AlertCircleIcon } from 'lucide-react'
 import { userManagementService } from '@/services/userManagementService'
@@ -854,9 +855,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       if (!encryptedCredentials) {
         // Check for known Supabase UUIDs for demo users
         const demoUUIDMap: { [key: string]: string } = {
-          'pierre-user-789': 'c550502f-c39d-4bb3-bb8c-d193657fdb24',
-          'super-user-456': 'c550502f-c39d-4bb3-bb8c-d193657fdb24',
-          'dynamic-pierre-user': 'c550502f-c39d-4bb3-bb8c-d193657fdb24' // Map login alias to actual user
+          'super-user-456': 'c550502f-c39d-4bb3-bb8c-d193657fdb24'
         }
 
         const supabaseUUID = demoUUIDMap[userId]
@@ -909,7 +908,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     let demoUserData = null
 
     // Clear any lockouts for system users to prevent getting stuck
-    if (email === 'elmfarrell@yahoo.com' || email === 'pierre@phaetonai.com' || email === 'guest@email.com') {
+    if (email === 'elmfarrell@yahoo.com' || email === 'guest@email.com') {
       // Clear failed login attempts for system users
       const failedAttempts = localStorage.getItem('failed_login_attempts')
       if (failedAttempts) {
@@ -925,8 +924,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       // Clear login stats for system users
       if (email === 'elmfarrell@yahoo.com') {
         localStorage.removeItem('loginStats_super-user-456')
-      } else if (email === 'pierre@phaetonai.com') {
-        localStorage.removeItem('loginStats_pierre-user-789')
       } else if (email === 'guest@email.com') {
         localStorage.removeItem('loginStats_guest-user-001')
       }
@@ -946,41 +943,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           settings: {
             theme: 'dark',
             notifications: {}
-          }
-        }
-      }
-    } else if (email === 'pierre@phaetonai.com') {
-      // Find admin user dynamically (could be created by createPierreUser utility)
-      const storedUsers = localStorage.getItem('systemUsers')
-      let pierreUser = null
-
-      if (storedUsers) {
-        try {
-          const users = JSON.parse(storedUsers)
-          pierreUser = users.find((u: any) => u.email === 'pierre@phaetonai.com')
-        } catch (e) {
-          console.error('Failed to parse stored users:', e)
-        }
-      }
-
-      // Check stored credentials or default password
-      const userToCheck = pierreUser?.id || 'pierre-user-789' // fallback to old ID
-      const isValidPassword = await checkDemoUserPassword(userToCheck, password) || password === '$Ineed1millie$_carexps'
-
-      if (isValidPassword) {
-        demoUserData = pierreUser || {
-          id: 'dynamic-pierre-user',
-          email: 'pierre@phaetonai.com',
-          name: 'Admin User',
-          role: 'admin' as const,
-          mfa_enabled: false,
-          settings: {
-            theme: 'light',
-            notifications: {
-              calls: true,
-              sms: true,
-              system: true
-            }
           }
         }
       }
