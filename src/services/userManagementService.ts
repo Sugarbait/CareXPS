@@ -3,6 +3,7 @@ import { Database, ServiceResponse } from '@/types/supabase'
 import { userProfileService, UserProfileData } from './userProfileService'
 import { auditLogger } from './auditLogger'
 import { encryptionService } from './encryption'
+import { TENANT_ID } from '@/config/tenantConfig'
 
 type UserCredentials = {
   email: string
@@ -28,7 +29,7 @@ export class UserManagementService {
   private static readonly LOCKOUT_DURATION = 30 * 60 * 1000 // 30 minutes
 
   /**
-   * Load all system users with their credentials (replaces localStorage.getItem('systemUsers'))
+   * Load all system users with their credentials (replaces localStorage.getItem(`systemUsers_${TENANT_ID}`))
    */
   static async loadSystemUsers(): Promise<ServiceResponse<SystemUserWithCredentials[]>> {
     try {
@@ -71,7 +72,7 @@ export class UserManagementService {
   }
 
   /**
-   * Save system users (replaces localStorage.setItem('systemUsers'))
+   * Save system users (replaces localStorage.setItem(`systemUsers_${TENANT_ID}`))
    */
   static async saveSystemUsers(users: SystemUserWithCredentials[]): Promise<ServiceResponse<void>> {
     try {
@@ -174,8 +175,9 @@ export class UserManagementService {
         timestamp: new Date().toISOString()
       })
 
-      // Get user by email
-      const userResponse = await userProfileService.getUserByEmail(email)
+      // 🔒 SECURITY: Get user by email, disabling cache fallback for authentication
+      // This ensures deleted users cannot log in using cached credentials
+      const userResponse = await userProfileService.getUserByEmail(email, false)
       if (userResponse.status === 'error') {
         return userResponse as ServiceResponse<SystemUserWithCredentials | null>
       }
@@ -469,6 +471,7 @@ export class UserManagementService {
             const { data: user } = await supabase
               .from('users')
               .select('last_login')
+              .eq('tenant_id', TENANT_ID)
               .eq('id', userId)
               .single()
 
@@ -668,6 +671,7 @@ export class UserManagementService {
         .update({
           last_login: now
         })
+        .eq('tenant_id', TENANT_ID)
         .eq('id', userId)
     } catch (error) {
       console.log('Could not update last login in Supabase (table may not exist), using localStorage fallback')
@@ -700,6 +704,7 @@ export class UserManagementService {
       const { data, error } = await supabase
         .from('users')
         .select('email')
+        .eq('tenant_id', TENANT_ID)
         .eq('id', userId)
         .single()
 
@@ -1007,6 +1012,7 @@ export class UserManagementService {
           locked_reason: reason || 'Account disabled by super user',
           locked_at: new Date().toISOString()
         })
+        .eq('tenant_id', TENANT_ID)
         .eq('id', userId)
 
       if (updateError) {
@@ -1014,14 +1020,14 @@ export class UserManagementService {
       }
 
       // Update in localStorage
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (systemUsers) {
         try {
           const users = JSON.parse(systemUsers)
           const userIndex = users.findIndex((u: any) => u.id === userId)
           if (userIndex >= 0) {
             users[userIndex].isLocked = true
-            localStorage.setItem('systemUsers', JSON.stringify(users))
+            localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(users))
           }
         } catch (parseError) {
           console.warn('Failed to update localStorage:', parseError)
@@ -1067,6 +1073,7 @@ export class UserManagementService {
           failed_login_attempts: 0,
           last_failed_login: null
         })
+        .eq('tenant_id', TENANT_ID)
         .eq('id', userId)
 
       if (updateError) {
@@ -1074,14 +1081,14 @@ export class UserManagementService {
       }
 
       // Update in localStorage
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (systemUsers) {
         try {
           const users = JSON.parse(systemUsers)
           const userIndex = users.findIndex((u: any) => u.id === userId)
           if (userIndex >= 0) {
             users[userIndex].isLocked = false
-            localStorage.setItem('systemUsers', JSON.stringify(users))
+            localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(users))
           }
         } catch (parseError) {
           console.warn('Failed to update localStorage:', parseError)
@@ -1178,6 +1185,7 @@ export class UserManagementService {
           .update({
             last_login: new Date().toISOString()
           })
+          .eq('tenant_id', TENANT_ID)
           .eq('id', userId)
         console.log('UserManagementService: Updated last_login in Supabase')
       } catch (error) {
@@ -1411,7 +1419,7 @@ export class UserManagementService {
       await auditLogger.logSecurityEvent('DUPLICATE_PROFILE_CLEANUP_START', 'users', true)
 
       // 1. Check current systemUsers
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (!systemUsers) {
         console.log('❌ No systemUsers found in localStorage')
         return { status: 'error', error: 'No systemUsers found in localStorage' }
@@ -1474,7 +1482,7 @@ export class UserManagementService {
       let systemUsersUpdated = false
       if (removedCount > 0) {
         console.log(`\n💾 Updating systemUsers - removed ${removedCount} duplicate profiles`)
-        localStorage.setItem('systemUsers', JSON.stringify(cleanedUsers))
+        localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(cleanedUsers))
         console.log(`✅ Updated systemUsers: ${cleanedUsers.length} users remain`)
         systemUsersUpdated = true
       } else {
@@ -1570,6 +1578,7 @@ export class UserManagementService {
       const { data: adminUsers, error } = await supabase
         .from('users')
         .select('id')
+        .eq('tenant_id', TENANT_ID)
         .eq('role', 'admin')
         .eq('is_active', true)
 
@@ -1667,7 +1676,7 @@ export class UserManagementService {
       if (!userEmail) {
         // Try to get email from localStorage users
         try {
-          const systemUsers = localStorage.getItem('systemUsers')
+          const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
           if (systemUsers) {
             const users = JSON.parse(systemUsers)
             const user = users.find((u: any) => u.id === userId)

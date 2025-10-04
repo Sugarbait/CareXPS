@@ -3,11 +3,15 @@
  * This fixes the "Last Login: Never" issue
  */
 
+import { getCurrentTenantId } from '@/config/tenantConfig'
+
+const TENANT_ID = getCurrentTenantId()
+
 export const clearUserCache = () => {
   console.log('🧹 Clearing cached user data to fix Last Login display...');
 
   // Remove the cached systemUsers which has outdated data
-  localStorage.removeItem('systemUsers');
+  localStorage.removeItem(`systemUsers_${TENANT_ID}`);
 
   // Remove any user-specific login stats that might be cached
   const keysToRemove: string[] = [];
@@ -36,7 +40,7 @@ export const clearUserCache = () => {
 // Auto-clear on page load if needed
 export const ensureFreshUserData = () => {
   // Check if systemUsers exists and if it has outdated structure
-  const systemUsers = localStorage.getItem('systemUsers');
+  const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`);
 
   if (systemUsers) {
     try {

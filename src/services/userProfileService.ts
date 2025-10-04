@@ -4,6 +4,7 @@ import { Database, ServiceResponse } from '@/types/supabase'
 import { encryptionService } from './encryption'
 import { auditLogger } from './auditLogger'
 import { avatarStorageService } from './avatarStorageService'
+import { TENANT_ID, getCurrentTenantId } from '@/config/tenantConfig'
 
 type DatabaseUser = Database['public']['Tables']['users']['Row']
 type DatabaseUserProfile = Database['public']['Tables']['user_profiles']['Row']
@@ -275,6 +276,7 @@ export class UserProfileService {
           const result = await supabase
             .from('users')
             .select('*')
+            .eq('tenant_id', TENANT_ID)
             .eq('email', userEmail)
             .single()
           supabaseUser = result.data
@@ -434,6 +436,7 @@ export class UserProfileService {
             .from('users')
             .upsert({
               id: userProfileData.id,
+              tenant_id: TENANT_ID,
               email: userProfileData.email,
               name: userProfileData.name,
               role: dbRole, // Use mapped role for database
@@ -472,8 +475,9 @@ export class UserProfileService {
       // Store individual user profile
       localStorage.setItem(`userProfile_${userId}`, JSON.stringify(userForStorage))
 
-      // Update the users list in localStorage for User Management page
-      const existingUsers = localStorage.getItem('systemUsers')
+      // Update the users list in localStorage for User Management page (TENANT-SPECIFIC)
+      const storageKey = `systemUsers_${getCurrentTenantId()}`
+      const existingUsers = localStorage.getItem(storageKey)
       let usersList = []
 
       try {
@@ -499,8 +503,8 @@ export class UserProfileService {
         console.log('UserProfileService: Added new user to systemUsers')
       }
 
-      localStorage.setItem('systemUsers', JSON.stringify(usersList))
-      console.log('UserProfileService: User saved to localStorage')
+      localStorage.setItem(storageKey, JSON.stringify(usersList))
+      console.log(`UserProfileService: User saved to localStorage with tenant key: ${storageKey}`)
 
       // Also update currentUser if this is the currently logged-in user
       const currentUser = localStorage.getItem('currentUser')
@@ -651,13 +655,17 @@ export class UserProfileService {
 
       // Try to load from Supabase first for cross-device sync
       try {
+        const currentTenantId = getCurrentTenantId()
         console.log('🔄 Loading users from Supabase for cross-device sync...')
+        console.log(`🏢 [TENANT DEBUG] Filtering users by tenant_id: "${currentTenantId}"`)
 
         const { data: supabaseUsers, error: usersError } = await supabase
           .from('users')
           .select('*')
-          .eq('is_active', true)
+          .eq('tenant_id', currentTenantId)
           .order('created_at', { ascending: false })
+
+        console.log(`📊 [TENANT DEBUG] Query returned ${supabaseUsers?.length || 0} users for tenant "${currentTenantId}"`)
 
         if (!usersError && supabaseUsers && supabaseUsers.length > 0) {
           console.log(`✅ Found ${supabaseUsers.length} users in Supabase`)
@@ -735,9 +743,10 @@ export class UserProfileService {
           const filteredUsers = this.filterDeletedUsers(allUsers)
           allUsers = filteredUsers
 
-          // Update localStorage cache for offline access
-          localStorage.setItem('systemUsers', JSON.stringify(allUsers))
-          console.log('📦 Cached users in localStorage for offline access')
+          // Update localStorage cache for offline access (TENANT-SPECIFIC)
+          const cacheKey = `systemUsers_${getCurrentTenantId()}`
+          localStorage.setItem(cacheKey, JSON.stringify(allUsers))
+          console.log(`📦 Cached users in localStorage for offline access (key: ${cacheKey})`)
 
         } else {
           console.log('📂 No users found in Supabase, checking localStorage...')
@@ -752,6 +761,7 @@ export class UserProfileService {
 
         // Define demo users to always have available (but preserve any existing changes)
         const defaultCreatedDate = new Date().toISOString() // Use today's date
+        const fallbackKey = `systemUsers_${getCurrentTenantId()}`
         const getDefaultDemoUsers = () => [
           {
             id: 'super-user-456',
@@ -786,7 +796,7 @@ export class UserProfileService {
         ]
 
         // Load from localStorage
-        const storedUsers = localStorage.getItem('systemUsers')
+        const storedUsers = localStorage.getItem(`systemUsers_${getCurrentTenantId()}`)
         let users = []
 
         if (storedUsers) {
@@ -839,7 +849,7 @@ export class UserProfileService {
 
           // Save updated users back to localStorage if we migrated data
           if (needsUpdate) {
-            localStorage.setItem('systemUsers', JSON.stringify(users))
+            localStorage.setItem(`systemUsers_${getCurrentTenantId()}`, JSON.stringify(users))
             console.log('UserProfileService: Migrated users with updated date fields')
           }
           } catch (parseError) {
@@ -850,7 +860,7 @@ export class UserProfileService {
           console.log('UserProfileService: No stored users found, seeding with demo users')
           users = getDefaultDemoUsers()
           // Save demo users to localStorage
-          localStorage.setItem('systemUsers', JSON.stringify(getDefaultDemoUsers()))
+          localStorage.setItem(`systemUsers_${getCurrentTenantId()}`, JSON.stringify(getDefaultDemoUsers()))
         }
 
         // Check which demo users have been explicitly deleted
@@ -997,7 +1007,11 @@ export class UserProfileService {
         // Generate azure_ad_id placeholder for compatibility with schema
         const azureAdId = `placeholder_${Date.now()}_${Math.random().toString(36).substring(2)}`
 
+        const currentTenantId = getCurrentTenantId()
+        console.log(`🏢 [TENANT DEBUG] Creating user with tenant_id: "${currentTenantId}"`)
+
         const userToInsert = {
+          tenant_id: currentTenantId,
           email: userData.email,
           name: userData.name,
           role: dbRole, // Use mapped role for database
@@ -1011,6 +1025,8 @@ export class UserProfileService {
             device_id: this.currentDeviceId || 'unknown'
           }
         }
+
+        console.log(`🔍 [TENANT DEBUG] User insert data - tenant_id: "${userToInsert.tenant_id}", email: "${userToInsert.email}"`)
 
         const { data: newUser, error: userError } = await supabase
           .from('users')
@@ -1050,7 +1066,7 @@ export class UserProfileService {
 
           // Update localStorage for immediate UI refresh with better error handling
           try {
-            const existingUsers = localStorage.getItem('systemUsers')
+            const existingUsers = localStorage.getItem(`systemUsers_${getCurrentTenantId()}`)
             let usersList = []
 
             if (existingUsers) {
@@ -1074,7 +1090,7 @@ export class UserProfileService {
               console.log('✅ Added new user to localStorage')
             }
 
-            localStorage.setItem('systemUsers', JSON.stringify(usersList))
+            localStorage.setItem(`systemUsers_${getCurrentTenantId()}`, JSON.stringify(usersList))
             console.log('📦 localStorage updated with', usersList.length, 'users')
 
             // Trigger storage event manually for cross-tab sync
@@ -1118,7 +1134,7 @@ export class UserProfileService {
         }
 
         // Get existing users from localStorage
-        const storedUsers = localStorage.getItem('systemUsers')
+        const storedUsers = localStorage.getItem(`systemUsers_${getCurrentTenantId()}`)
         let users = []
         if (storedUsers) {
           try {
@@ -1148,7 +1164,7 @@ export class UserProfileService {
           console.log('✅ Added new user to localStorage fallback')
         }
 
-        localStorage.setItem('systemUsers', JSON.stringify(users))
+        localStorage.setItem(`systemUsers_${getCurrentTenantId()}`, JSON.stringify(users))
         console.log('📦 localStorage fallback updated with', users.length, 'users')
 
         // Trigger storage event for cross-tab sync
@@ -1195,6 +1211,7 @@ export class UserProfileService {
         const { error: deleteError } = await supabase
           .from('users')
           .delete()
+          .eq('tenant_id', TENANT_ID)
           .eq('id', userId)
 
         if (deleteError) {
@@ -1231,12 +1248,12 @@ export class UserProfileService {
       }
 
       // STEP 2: Remove from localStorage
-      const storedUsers = localStorage.getItem('systemUsers')
+      const storedUsers = localStorage.getItem(`systemUsers_${getCurrentTenantId()}`)
       if (storedUsers) {
         try {
           const users = JSON.parse(storedUsers)
           const filteredUsers = users.filter((u: any) => u.id !== userId)
-          localStorage.setItem('systemUsers', JSON.stringify(filteredUsers))
+          localStorage.setItem(`systemUsers_${getCurrentTenantId()}`, JSON.stringify(filteredUsers))
           console.log('UserProfileService: User deleted from localStorage, remaining users:', filteredUsers.length)
         } catch (parseError) {
           console.error('UserProfileService: Failed to parse users for deletion:', parseError)
@@ -1369,13 +1386,14 @@ export class UserProfileService {
   /**
    * Get user by email (for login scenarios)
    */
-  static async getUserByEmail(email: string): Promise<ServiceResponse<UserProfileData | null>> {
+  static async getUserByEmail(email: string, allowCacheFallback: boolean = true): Promise<ServiceResponse<UserProfileData | null>> {
     try {
       // Try Supabase first
       try {
         const { data: user, error: userError } = await supabase
           .from('users')
           .select('*')
+          .eq('tenant_id', TENANT_ID)
           .eq('email', email)
           .eq('is_active', true)
           .single()
@@ -1417,16 +1435,31 @@ export class UserProfileService {
           console.log('UserProfileService: User found in Supabase')
           return { status: 'success', data: this.transformToUserProfileData(completeProfile) }
         } else if (userError.code === 'PGRST116') {
-          // User not found in Supabase, try localStorage
+          // User not found in Supabase
+          if (!allowCacheFallback) {
+            console.log('UserProfileService: User not found in Supabase, cache fallback disabled for security')
+            return { status: 'success', data: null }
+          }
+          // Try localStorage if fallback is allowed
         } else {
           throw new Error(`Failed to get user by email: ${userError.message}`)
         }
       } catch (supabaseError) {
+        if (!allowCacheFallback) {
+          console.log('UserProfileService: Supabase query failed, cache fallback disabled for security')
+          return { status: 'success', data: null }
+        }
         console.log('UserProfileService: Supabase query failed, trying localStorage fallback')
       }
 
+      // 🔒 SECURITY: localStorage fallback only allowed for non-authentication scenarios
+      if (!allowCacheFallback) {
+        console.log('UserProfileService: Cache fallback disabled - user not found')
+        return { status: 'success', data: null }
+      }
+
       // Fallback to localStorage-based user storage
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${getCurrentTenantId()}`)
       if (systemUsers) {
         try {
           const users = JSON.parse(systemUsers)
@@ -1509,6 +1542,7 @@ export class UserProfileService {
         const { data: user, error } = await supabase
           .from('users')
           .select('*')
+          .eq('tenant_id', TENANT_ID)
           .eq('id', userId)
           .single()
 
@@ -1713,6 +1747,7 @@ export class UserProfileService {
           const { error: usersError } = await supabase
             .from('users')
             .update(usersUpdateData)
+            .eq('tenant_id', TENANT_ID)
             .eq('id', userId)
 
           if (usersError) {
@@ -1797,7 +1832,7 @@ export class UserProfileService {
       }
 
       // Update systemUsers array
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${getCurrentTenantId()}`)
       if (systemUsers) {
         const users = JSON.parse(systemUsers)
         const userIndex = users.findIndex((u: any) => u.id === userId)
@@ -1816,7 +1851,7 @@ export class UserProfileService {
             console.log(`🔐 SUPER USER PROTECTION: Forced role preservation for ${users[userIndex].email} in systemUsers`)
           }
 
-          localStorage.setItem('systemUsers', JSON.stringify(users))
+          localStorage.setItem(`systemUsers_${getCurrentTenantId()}`, JSON.stringify(users))
         }
       }
 
@@ -1849,7 +1884,7 @@ export class UserProfileService {
     try {
       console.log('UserProfileService: Starting duplicate user removal...')
 
-      const storedUsers = localStorage.getItem('systemUsers')
+      const storedUsers = localStorage.getItem(`systemUsers_${getCurrentTenantId()}`)
       if (!storedUsers) {
         return { status: 'success', data: { removed: 0, remaining: 0 } }
       }
@@ -1879,7 +1914,7 @@ export class UserProfileService {
       }
 
       // Save the cleaned user list
-      localStorage.setItem('systemUsers', JSON.stringify(uniqueUsers))
+      localStorage.setItem(`systemUsers_${getCurrentTenantId()}`, JSON.stringify(uniqueUsers))
 
       await auditLogger.logSecurityEvent('DUPLICATE_USERS_REMOVED', 'users', true, {
         originalCount,
@@ -2061,7 +2096,7 @@ export class UserProfileService {
   private static async getUserEmailFromStorage(userId: string): Promise<string | null> {
     try {
       // Check systemUsers first
-      const storedUsers = localStorage.getItem('systemUsers')
+      const storedUsers = localStorage.getItem(`systemUsers_${getCurrentTenantId()}`)
       if (storedUsers) {
         const users = JSON.parse(storedUsers)
         const user = users.find((u: any) => u.id === userId)
@@ -2084,6 +2119,7 @@ export class UserProfileService {
         const { data: user } = await supabase
           .from('users')
           .select('email')
+          .eq('tenant_id', TENANT_ID)
           .eq('id', userId)
           .single()
         return user?.email || null
@@ -2118,7 +2154,7 @@ export class UserProfileService {
       }
 
       // Check systemUsers
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${getCurrentTenantId()}`)
       if (systemUsers) {
         const users = JSON.parse(systemUsers)
         const user = users.find((u: any) => u.id === userId)
@@ -2356,7 +2392,7 @@ export class UserProfileService {
       console.log('📥 REAL-TIME SYNC: Received users table change:', payload.eventType)
 
       // Update localStorage cache
-      const currentUsers = localStorage.getItem('systemUsers')
+      const currentUsers = localStorage.getItem(`systemUsers_${getCurrentTenantId()}`)
       if (currentUsers) {
         let users = JSON.parse(currentUsers)
 
@@ -2378,7 +2414,7 @@ export class UserProfileService {
           const existingIndex = users.findIndex((u: any) => u.id === newUser.id)
           if (existingIndex === -1) {
             users.push(newUser)
-            localStorage.setItem('systemUsers', JSON.stringify(users))
+            localStorage.setItem(`systemUsers_${getCurrentTenantId()}`, JSON.stringify(users))
             console.log('📥 Added new user from real-time sync')
 
             // Trigger UI update
@@ -2404,7 +2440,7 @@ export class UserProfileService {
           const existingIndex = users.findIndex((u: any) => u.id === updatedUser.id)
           if (existingIndex >= 0) {
             users[existingIndex] = { ...users[existingIndex], ...updatedUser }
-            localStorage.setItem('systemUsers', JSON.stringify(users))
+            localStorage.setItem(`systemUsers_${getCurrentTenantId()}`, JSON.stringify(users))
             console.log('📥 Updated user from real-time sync')
 
             // Trigger UI update
@@ -2416,7 +2452,7 @@ export class UserProfileService {
         } else if (payload.eventType === 'DELETE' && payload.old) {
           // Remove deleted user
           const filteredUsers = users.filter((u: any) => u.id !== payload.old.id)
-          localStorage.setItem('systemUsers', JSON.stringify(filteredUsers))
+          localStorage.setItem(`systemUsers_${getCurrentTenantId()}`, JSON.stringify(filteredUsers))
           console.log('📥 Removed user from real-time sync')
 
           // IMPORTANT: Also add to deleted tracking to prevent recreation

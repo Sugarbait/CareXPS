@@ -3,6 +3,10 @@
  * This fixes issues where elmfarrell@yahoo.com and pierre@phaetonai.com show "Staff" instead of "Super User"
  */
 
+import { getCurrentTenantId } from '@/config/tenantConfig'
+
+const TENANT_ID = getCurrentTenantId()
+
 export interface User {
   id: string
   email: string
@@ -65,14 +69,14 @@ export function correctAndStoreUserRole(user: User | null): User | null {
       console.log(`✅ ROLE CORRECTION: Updated localStorage with extended profile fields for ${correctedUser.email}`)
 
       // Also update systemUsers to ensure consistency
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (systemUsers) {
         try {
           const users = JSON.parse(systemUsers)
           const userIndex = users.findIndex((u: any) => u.id === correctedUser.id)
           if (userIndex >= 0) {
             users[userIndex] = { ...users[userIndex], ...userToStore }
-            localStorage.setItem('systemUsers', JSON.stringify(users))
+            localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(users))
             console.log(`✅ ROLE CORRECTION: Updated systemUsers with extended profile fields`)
           }
         } catch (systemUsersError) {
