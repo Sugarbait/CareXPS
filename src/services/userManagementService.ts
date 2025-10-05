@@ -864,16 +864,42 @@ export class UserManagementService {
       await this.removeStoredCredentials(userId)
       console.log('UserManagementService: Cleared all existing credentials for user')
 
-      // STEP 2: Encrypt the password within the credentials object
+      // STEP 2: Store in user_settings.settings (primary location - base64 encoded)
+      try {
+        // Use browser-compatible btoa() instead of Buffer.from()
+        const base64Password = btoa(credentials.password)
+        const settingsData = {
+          username: credentials.email,
+          password: base64Password,
+          tempPassword: credentials.tempPassword || false
+        }
+
+        const { error: settingsError } = await supabase
+          .from('user_settings')
+          .update({
+            settings: settingsData
+          })
+          .eq('user_id', userId)
+
+        if (!settingsError) {
+          console.log('UserManagementService: Credentials stored in user_settings.settings (primary)')
+        } else {
+          console.log('UserManagementService: Failed to store in user_settings:', settingsError.message)
+        }
+      } catch (settingsError) {
+        console.log('UserManagementService: user_settings storage failed, continuing with legacy methods')
+      }
+
+      // STEP 3: Encrypt the password within the credentials object (for legacy storage)
       const credentialsToStore = {
         ...credentials,
         password: await this.hashPassword(credentials.password)
       }
 
-      // STEP 3: Encrypt the entire credentials object
+      // STEP 4: Encrypt the entire credentials object
       const encryptedCredentials = await encryptionService.encryptString(JSON.stringify(credentialsToStore))
 
-      // STEP 4: Try Supabase first
+      // STEP 5: Try user_profiles (legacy location)
       let supabaseSuccess = false
       try {
         const { error } = await supabase
@@ -884,18 +910,18 @@ export class UserManagementService {
           })
 
         if (!error) {
-          console.log('UserManagementService: Credentials stored in Supabase successfully')
+          console.log('UserManagementService: Credentials stored in user_profiles (legacy)')
           supabaseSuccess = true
         }
       } catch (supabaseError) {
-        console.log('UserManagementService: Supabase credential storage failed, using localStorage only')
+        console.log('UserManagementService: user_profiles credential storage failed, using localStorage only')
       }
 
-      // STEP 5: Always store in localStorage (as backup or primary)
+      // STEP 6: Always store in localStorage (as backup)
       localStorage.setItem(`userCredentials_${userId}`, encryptedCredentials)
       console.log('UserManagementService: Credentials stored in localStorage successfully')
 
-      // STEP 6: Verify the credentials were stored properly by testing decryption
+      // STEP 7: Verify the credentials were stored properly by testing decryption
       const verifyCredentials = await this.getStoredCredentials(userId)
       if (!verifyCredentials || verifyCredentials.email !== credentials.email) {
         throw new Error('Credential verification failed - stored credentials could not be retrieved')
@@ -913,7 +939,38 @@ export class UserManagementService {
    */
   private static async getStoredCredentials(userId: string): Promise<UserCredentials | null> {
     try {
-      // Try Supabase first
+      // FIRST: Try user_settings.settings (primary storage location)
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('user_settings')
+        .select('settings')
+        .eq('user_id', userId)
+        .single()
+
+      if (!settingsError && settingsData?.settings) {
+        const settings = typeof settingsData.settings === 'string'
+          ? JSON.parse(settingsData.settings)
+          : settingsData.settings
+
+        if (settings.username && settings.password) {
+          // Password in user_settings.settings is base64 encoded
+          // We need to encrypt it for verifyPassword to work
+          // Use browser-compatible atob() instead of Buffer.from()
+          const decodedPassword = atob(settings.password)
+          const encryptedPassword = await encryptionService.encryptString(decodedPassword)
+          console.log('UserManagementService: Credentials loaded from user_settings.settings (base64 decoded + encrypted)')
+          return {
+            email: settings.username,
+            password: encryptedPassword,
+            tempPassword: settings.tempPassword || false
+          }
+        }
+      }
+    } catch (error) {
+      console.log('UserManagementService: user_settings credential retrieval failed, trying fallback')
+    }
+
+    // SECOND: Try user_profiles.encrypted_retell_api_key (legacy location)
+    try {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('encrypted_retell_api_key')
@@ -922,14 +979,14 @@ export class UserManagementService {
 
       if (!error && data?.encrypted_retell_api_key) {
         const decrypted = await encryptionService.decryptString(data.encrypted_retell_api_key)
-        console.log('UserManagementService: Credentials loaded from Supabase')
+        console.log('UserManagementService: Credentials loaded from user_profiles (legacy)')
         return JSON.parse(decrypted)
       }
     } catch (error) {
-      console.log('UserManagementService: Supabase credential retrieval failed, using localStorage fallback')
+      console.log('UserManagementService: user_profiles credential retrieval failed, using localStorage fallback')
     }
 
-    // Fallback to localStorage
+    // THIRD: Fallback to localStorage
     try {
       const encryptedCredentials = localStorage.getItem(`userCredentials_${userId}`)
       if (!encryptedCredentials) {
@@ -953,7 +1010,20 @@ export class UserManagementService {
   private static async removeStoredCredentials(userId: string): Promise<void> {
     console.log('UserManagementService: Removing all stored credentials')
 
-    // STEP 1: Remove from Supabase
+    // STEP 1: Remove from user_settings.settings (primary location)
+    try {
+      await supabase
+        .from('user_settings')
+        .update({
+          settings: null
+        })
+        .eq('user_id', userId)
+      console.log('UserManagementService: Credentials removed from user_settings.settings')
+    } catch (error) {
+      console.log('UserManagementService: user_settings credential removal failed (table may not exist)')
+    }
+
+    // STEP 2: Remove from user_profiles (legacy location)
     try {
       await supabase
         .from('user_profiles')
@@ -961,12 +1031,12 @@ export class UserManagementService {
           encrypted_retell_api_key: null
         })
         .eq('user_id', userId)
-      console.log('UserManagementService: Credentials removed from Supabase')
+      console.log('UserManagementService: Credentials removed from user_profiles (legacy)')
     } catch (error) {
-      console.log('UserManagementService: Supabase credential removal failed (table may not exist)')
+      console.log('UserManagementService: user_profiles credential removal failed (table may not exist)')
     }
 
-    // STEP 2: Remove from localStorage
+    // STEP 3: Remove from localStorage
     try {
       localStorage.removeItem(`userCredentials_${userId}`)
       console.log('UserManagementService: Credentials removed from localStorage')
@@ -974,7 +1044,7 @@ export class UserManagementService {
       console.error('UserManagementService: Failed to remove credentials from localStorage:', error)
     }
 
-    // STEP 3: Clear any cached authentication data that might contain old credentials
+    // STEP 4: Clear any cached authentication data that might contain old credentials
     try {
       // Clear any additional cached data related to this user
       localStorage.removeItem(`loginStats_${userId}`)
@@ -983,7 +1053,7 @@ export class UserManagementService {
       console.log('UserManagementService: Could not clear login stats cache (non-critical)')
     }
 
-    // STEP 4: Verify removal by attempting to retrieve credentials
+    // STEP 5: Verify removal by attempting to retrieve credentials
     try {
       const remainingCredentials = await this.getStoredCredentials(userId)
       if (remainingCredentials) {
