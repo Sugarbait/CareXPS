@@ -5,6 +5,8 @@
  * This utility ensures their role is always 'super_user' no matter what
  */
 
+import { TENANT_ID } from '@/config/tenantConfig'
+
 export const SUPER_USER_EMAILS = [
   'pierre@phaetonai.com',
   'elmfarrell@yahoo.com'
@@ -56,7 +58,7 @@ export function enforceSuperUserInLocalStorage(): void {
     }
 
     // Enforce in systemUsers
-    const systemUsers = localStorage.getItem('systemUsers')
+    const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
     if (systemUsers) {
       const users = JSON.parse(systemUsers)
       let updated = false
@@ -68,7 +70,7 @@ export function enforceSuperUserInLocalStorage(): void {
         }
       })
       if (updated) {
-        localStorage.setItem('systemUsers', JSON.stringify(users))
+        localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(users))
       }
     }
 
