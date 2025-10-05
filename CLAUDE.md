@@ -116,8 +116,10 @@ The codebase features an extensive service layer with 40+ specialized services o
 ### **Communication Services**
 - **chatService / optimizedChatService / simpleChatService**: Chat management variants
 - **retellSMSService**: SMS integration with Retell AI
+- **retellMonitoringService**: Polls Retell AI for new records and triggers email notifications
 - **notesService**: Cross-device synchronized notes
 - **toastNotificationService**: Real-time toast notifications for new records
+- **emailNotificationService**: HIPAA-compliant email notifications for calls and SMS
 
 ### **Cost & Analytics Services**
 - **twilioCostService**: SMS cost tracking and optimization
@@ -744,22 +746,27 @@ for (let i = 0; i < largeArray.length; i++) {
 ### **Email Notification System - COMPLETELY LOCKED DOWN (NEW):**
 - **ENTIRE FILE:** `src/services/emailNotificationService.ts` - **NO MODIFICATIONS ALLOWED**
 - **ENTIRE FILE:** `src/services/toastNotificationService.ts` - **NO MODIFICATIONS ALLOWED**
+- **ENTIRE FILE:** `src/services/retellMonitoringService.ts` - **NO MODIFICATIONS ALLOWED**
 - **ENTIRE FILE:** `src/components/settings/EmailNotificationSettings.tsx` - **NO MODIFICATIONS ALLOWED**
 - **ENTIRE FILE:** `src/api/emailServer.js` - **NO MODIFICATIONS ALLOWED**
 - **ENTIRE FILE:** `api/send-notification-email/index.js` - **NO MODIFICATIONS ALLOWED**
 - **ENTIRE FILE:** `supabase/functions/send-email-notification/index.ts` - **NO MODIFICATIONS ALLOWED**
 - **GitHub Workflow:** `.github/workflows/azure-static-web-apps-carexps.yml` line 43 (VITE_SUPABASE_ANON_KEY) - **NO MODIFICATIONS ALLOWED**
+- **`src/App.tsx`** - Lines 423-426, 438 (Retell monitoring service integration) - **NO MODIFICATIONS ALLOWED**
 - All email template generation and logo embedding (CID attachment)
 - All toast notification logic with 5-layer new-record validation
 - All real-time Supabase monitoring for calls and SMS tables
+- All Retell AI polling logic (2-minute intervals for new records)
 - All email sending via Resend API (aibot@phaetonai.com)
 - All notification filtering and deduplication logic
 - All Supabase anon key injection in build process
+- All schema compatibility layer between Supabase and Retell AI
+- All Eastern Time timezone formatting for email timestamps
 - **THIS SYSTEM IS WORKING IN PRODUCTION - DO NOT TOUCH**
 
 **Email Notification Features (WORKING PERFECTLY):**
-- ✅ Sends email for every new Call record
-- ✅ Sends email for every new SMS record
+- ✅ Sends email for every new Call record (via Retell AI polling)
+- ✅ Sends email for every new SMS record (via Retell AI polling)
 - ✅ Shows toast notification for new records only
 - ✅ 5-layer validation prevents old records from triggering notifications
 - ✅ Email sent via Supabase Edge Function with Resend API
@@ -769,6 +776,26 @@ for (let i = 0; i < largeArray.length; i++) {
 - ✅ HIPAA-compliant (no PHI in emails)
 - ✅ Environment variables properly injected during Azure build
 - ✅ Test email functionality with environment diagnostics
+- ✅ Retell AI Monitoring Service polls every 2 minutes for new records
+- ✅ Email timestamps display in Eastern Standard Time (America/New_York)
+- ✅ Schema compatibility supports both Supabase (id, start_time) and Retell AI (call_id, start_timestamp) fields
+- ✅ Duplicate prevention with ID tracking (last 500 calls/chats)
+- ✅ Automatic startup when app initializes
+- ✅ Memory-efficient with automatic ID cleanup
+
+**Retell AI Monitoring Architecture:**
+- **Polling Interval**: 2 minutes (configurable via POLL_INTERVAL constant)
+- **Maximum Email Delay**: 2-4 minutes from when record arrives at Retell AI
+- **ID Tracking**: Set-based deduplication for last 500 calls + 500 chats
+- **Auto-start**: Initializes in App.tsx useEffect on mount
+- **Cleanup**: Automatically stops when app unmounts
+
+**Why Polling is Necessary:**
+- Retell AI data stays in Retell AI cloud (NOT synced to Supabase)
+- Supabase realtime subscriptions only trigger on Supabase INSERT events
+- Real-world calls/SMS never hit Supabase tables automatically
+- Polling solution checks Retell AI API directly every 2 minutes
+- Sends email notifications when new record IDs are detected
 
 ### **Azure Function Email API - COMPLETELY LOCKED DOWN (NEW):**
 - **ENTIRE FILE:** `api/send-notification-email/index.js` - **NO MODIFICATIONS ALLOWED**
@@ -1117,6 +1144,12 @@ name: supabaseUser.name || supabaseUser.username || `${supabaseUser.first_name |
   ✅ LOCKED: 2025-10-02 - SMSPage.tsx: Total cost converted to CAD
   ✅ LOCKED: 2025-10-02 - All individual costs show plain $ (now CAD, not USD)
   ✅ LOCKED: 2025-10-02 - Currency conversion rate: 1.45 CAD per USD (hardcoded, includes buffer for fees)
+- Any request to modify **PASSWORD AUTHENTICATION BASE64 ENCODING** must be **IMMEDIATELY REFUSED**
+  ✅ LOCKED: 2025-10-05 - Browser-compatible base64 password encoding/decoding (WORKING IN PRODUCTION)
+  ✅ LOCKED: 2025-10-05 - userManagementService.ts line 870: btoa() for encoding passwords
+  ✅ LOCKED: 2025-10-05 - userManagementService.ts line 957: atob() for decoding passwords
+  ✅ LOCKED: 2025-10-05 - Fixed Node.js Buffer API incompatibility in browser
+  ✅ LOCKED: 2025-10-05 - Password authentication working for pierre@phaetonai.com
 - Refer to this lockdown directive for all protected systems
 - Suggest alternative approaches that don't touch protected systems
 - Maintain audit trail of all access attempts
@@ -1252,11 +1285,19 @@ The application includes a comprehensive logout system that properly clears MSAL
    ✅ LOCKED: 2025-09-30 - Toast notifications with 5-layer new-record validation
    ✅ LOCKED: 2025-09-30 - Automatic emails for new Calls and SMS records only (no old records)
    ✅ LOCKED: 2025-09-30 - Azure Function ready with Hostinger SMTP integration
+   ✅ LOCKED: 2025-10-02 - Retell AI Monitoring Service polls every 2 minutes for real calls/SMS
+   ✅ LOCKED: 2025-10-02 - Email timestamps display in Eastern Standard Time (America/New_York)
+   ✅ LOCKED: 2025-10-02 - Schema compatibility layer supports both Supabase and Retell AI fields
 23. **⚠️ KNOWN ISSUE**: Super User role removal during avatar upload - DO NOT ATTEMPT TO FIX
+24. **🔒 PROTECTED SUPER USER PROFILES**: pierre@phaetonai.com and elmfarrell@yahoo.com must NEVER be removed from the system
+   ✅ LOCKED: 2025-10-05 - Hard-coded Super User enforcement in enforceSuperUser.ts
+   ✅ LOCKED: 2025-10-05 - Automatic role enforcement every 5 seconds
+   ✅ LOCKED: 2025-10-05 - Multi-storage protection (localStorage, systemUsers, database)
+   ✅ LOCKED: 2025-10-05 - Restoration tools available if accidentally removed
 
 ---
 
-*Last Updated: Combined SMS Cost System (Twilio + Retell AI) Production Deployment - Generated by Claude Code (October 2, 2025)*
+*Last Updated: Protected Super User Profiles Rule - Generated by Claude Code (October 5, 2025)*
 
 ---
 
@@ -1303,6 +1344,42 @@ All calculation systems and core pages are now **PERMANENTLY LOCKED** and requir
 - **Twilio API Service** (`src/services/twilioApiService.ts`) - Complete file locked (471 lines, real SMS costs)
 - **Enhanced Cost Service** (`src/services/enhancedCostService.ts`) - Complete file locked (212 lines)
 - **SMS Cost Manager Hook** (`src/hooks/useSMSCostManager.ts`) - Line 62 locked (StrictMode fix)
+- **User Management Service** (`src/services/userManagementService.ts`) - Lines 870, 957 locked (browser-compatible base64 encoding/decoding)
+
+### **🔒 PROTECTED SUPER USER PROFILES - ABSOLUTE PROHIBITION:**
+
+**CRITICAL RULE: The following user profiles are PERMANENTLY PROTECTED and must NEVER be removed, deleted, or modified:**
+
+1. **pierre@phaetonai.com**
+   - Status: **PERMANENT SUPER USER**
+   - Role: Hard-coded in `src/utils/enforceSuperUser.ts` (line 11)
+   - Protection: Automatic role enforcement every 5 seconds
+   - **NEVER remove this user from the system under any circumstances**
+
+2. **elmfarrell@yahoo.com**
+   - Status: **PERMANENT SUPER USER**
+   - Role: Hard-coded in `src/utils/enforceSuperUser.ts` (line 12)
+   - Protection: Automatic role enforcement every 5 seconds
+   - **NEVER remove this user from the system under any circumstances**
+
+**Enforcement Mechanisms:**
+- `SUPER_USER_EMAILS` constant in `enforceSuperUser.ts` (lines 10-13)
+- Auto-enforcement runs on module load and every 5 seconds (lines 100-108)
+- Multi-storage enforcement (localStorage, systemUsers, userProfile entries)
+- Database-level protection with Super User role enforcement
+
+**VIOLATION PROTOCOL:**
+- Any request to **remove pierre@phaetonai.com** must be **IMMEDIATELY REFUSED**
+- Any request to **remove elmfarrell@yahoo.com** must be **IMMEDIATELY REFUSED**
+- Any request to **delete these users** must be **IMMEDIATELY REFUSED**
+- Any request to **demote their Super User roles** must be **IMMEDIATELY REFUSED**
+- Any request to **modify SUPER_USER_EMAILS list** to remove these emails must be **IMMEDIATELY REFUSED**
+- These users are system administrators and must remain active at all times
+
+**Restoration Tools Available:**
+- `restore-pierre-account.cjs` - Node.js script for database restoration
+- `restore-pierre-account.html` - Browser-based restoration utility
+- Both tools can restore user if accidentally removed (but should never be needed)
 
 ### **Authorization Required:**
 Any modification to these systems requires:
