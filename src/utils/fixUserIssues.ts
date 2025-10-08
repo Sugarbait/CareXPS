@@ -1,3 +1,4 @@
+import { TENANT_ID } from '@/config/tenantConfig'
 import { userProfileService } from '@/services/userProfileService'
 import { userManagementService } from '@/services/userManagementService'
 import { avatarStorageService } from '@/services/avatarStorageService'
@@ -85,7 +86,7 @@ export class UserIssuesFixer {
       }
 
       // Check for duplicate demo users
-      const storedUsers = localStorage.getItem('systemUsers')
+      const storedUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (storedUsers) {
         try {
           const users = JSON.parse(storedUsers)
@@ -220,7 +221,7 @@ export class UserIssuesFixer {
       }
 
       // Check for duplicate users
-      const storedUsers = localStorage.getItem('systemUsers')
+      const storedUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (storedUsers) {
         try {
           const users = JSON.parse(storedUsers)

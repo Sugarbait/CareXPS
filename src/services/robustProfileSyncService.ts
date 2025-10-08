@@ -1,6 +1,7 @@
 import { supabase, supabaseConfig } from '@/config/supabase'
 import { auditLogger } from './auditLogger'
 import { ServiceResponse } from '@/types/supabase'
+import { TENANT_ID } from '@/config/tenantConfig'
 
 export interface ProfileData {
   id: string
@@ -486,7 +487,7 @@ export class RobustProfileSyncService {
       localStorage.setItem(`userProfile_${profileData.id}`, JSON.stringify(updatedProfile))
 
       // Update systemUsers array
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (systemUsers) {
         try {
           const users = JSON.parse(systemUsers)
@@ -498,7 +499,7 @@ export class RobustProfileSyncService {
             users.push(updatedProfile)
           }
 
-          localStorage.setItem('systemUsers', JSON.stringify(users))
+          localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(users))
           console.log('✅ ROBUST PROFILE SYNC: Updated systemUsers in localStorage')
         } catch (error) {
           console.warn('🔄 ROBUST PROFILE SYNC: Failed to update systemUsers:', error)
@@ -620,7 +621,7 @@ export class RobustProfileSyncService {
       }
 
       // Try systemUsers as last resort
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (systemUsers) {
         try {
           const users = JSON.parse(systemUsers)

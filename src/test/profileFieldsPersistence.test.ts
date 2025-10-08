@@ -1,3 +1,4 @@
+import { TENANT_ID } from '@/config/tenantConfig'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 // Mock Supabase before importing the service
@@ -206,11 +207,11 @@ describe('Profile Fields Persistence Service', () => {
         { id: testUserId, name: 'Old Name' },
         { id: 'other-user', name: 'Other User' }
       ]
-      localStorage.setItem('systemUsers', JSON.stringify(existingUsers))
+      localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(existingUsers))
 
       profileFieldsPersistenceService.updateLocalStorageProfileFields(testUserId, testProfileData)
 
-      const updatedUsers = JSON.parse(localStorage.getItem('systemUsers') || '[]')
+      const updatedUsers = JSON.parse(localStorage.getItem(`systemUsers_${TENANT_ID}`) || '[]')
       const updatedUser = updatedUsers.find((u: any) => u.id === testUserId)
 
       expect(updatedUser.department).toBe(testProfileData.department)

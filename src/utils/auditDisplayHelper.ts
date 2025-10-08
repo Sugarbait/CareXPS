@@ -9,6 +9,7 @@
 
 import { encryptionService } from '@/services/encryption'
 import { auditUserLookupService } from '@/services/auditUserLookupService'
+import { TENANT_ID } from '@/config/tenantConfig'
 
 // Cache for user lookups to avoid repeated database calls
 const userCache = new Map<string, string>()
@@ -57,7 +58,7 @@ const getUserNameFromId = async (userId: string): Promise<string> => {
     }
 
     // Strategy 3: Check systemUsers for admin accounts
-    const systemUsers = localStorage.getItem('systemUsers')
+    const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
     if (systemUsers) {
       try {
         const users = JSON.parse(systemUsers)

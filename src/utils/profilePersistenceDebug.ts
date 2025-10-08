@@ -3,6 +3,7 @@
  * Use in browser console to test and verify profile field persistence
  */
 
+import { TENANT_ID } from '@/config/tenantConfig'
 import { profileFieldsPersistenceService } from '@/services/profileFieldsPersistenceService'
 
 export class ProfilePersistenceDebug {
@@ -126,7 +127,7 @@ export class ProfilePersistenceDebug {
     }
 
     // Check systemUsers
-    const systemUsers = localStorage.getItem('systemUsers')
+    const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
     if (systemUsers) {
       const users = JSON.parse(systemUsers)
       const user = users.find((u: any) => u.id === userId)

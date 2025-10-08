@@ -1,3 +1,4 @@
+import { TENANT_ID } from '@/config/tenantConfig'
 import React, { useState, useEffect } from 'react'
 import {
   UserIcon,
@@ -235,7 +236,7 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({ user }) 
           setUsers(transformedUsers)
 
           // Update localStorage cache to sync data sources
-          localStorage.setItem('systemUsers', JSON.stringify(transformedUsers))
+          localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(transformedUsers))
           console.log('📦 Updated localStorage cache with userProfileService data')
           return
         }
@@ -245,7 +246,7 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({ user }) 
 
       // Fallback 2: Direct localStorage access
       console.log('🔄 Fallback to direct localStorage access...')
-      const storedUsers = localStorage.getItem('systemUsers')
+      const storedUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (storedUsers) {
         try {
           const parsedUsers = JSON.parse(storedUsers)
@@ -298,7 +299,7 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({ user }) 
 
       setUsers(demoUsers)
       // Cache the demo users for consistency
-      localStorage.setItem('systemUsers', JSON.stringify(demoUsers))
+      localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(demoUsers))
       console.log('✅ Created and cached demo users as fallback')
 
     } catch (error) {
@@ -317,18 +318,18 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({ user }) 
       if (response.status === 'success') {
         setUsers(updatedUsers)
         // Also update localStorage for backward compatibility
-        localStorage.setItem('systemUsers', JSON.stringify(updatedUsers))
+        localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(updatedUsers))
       } else {
         console.error('Failed to save users to Supabase:', response.error)
         // Fallback to localStorage only
         setUsers(updatedUsers)
-        localStorage.setItem('systemUsers', JSON.stringify(updatedUsers))
+        localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(updatedUsers))
       }
     } catch (error) {
       console.error('Error saving users:', error)
       // Fallback to localStorage only
       setUsers(updatedUsers)
-      localStorage.setItem('systemUsers', JSON.stringify(updatedUsers))
+      localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(updatedUsers))
     }
   }
 
@@ -727,7 +728,7 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({ user }) 
         setUsers(updatedUsers)
 
         // Step 3: Update localStorage systemUsers
-        localStorage.setItem('systemUsers', JSON.stringify(updatedUsers))
+        localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(updatedUsers))
 
         // Step 4: Add to deletedUsers list to prevent recreation (enhanced tracking)
         const deletedUsers = localStorage.getItem('deletedUsers')

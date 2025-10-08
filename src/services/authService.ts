@@ -4,6 +4,7 @@ import { secureLogger } from '@/services/secureLogger'
 import FreshMfaService from '@/services/freshMfaService'
 import { secureStorage } from '@/services/secureStorage'
 import { encryptionService } from '@/services/encryption'
+import { TENANT_ID } from '@/config/tenantConfig'
 
 const logger = secureLogger.component('AuthService')
 
@@ -16,6 +17,7 @@ class AuthService {
       const { data: user, error } = await supabase
         .from('users')
         .select('*')
+        .eq('tenant_id', TENANT_ID)
         .eq('azure_ad_id', accountId)
         .single()
 
@@ -89,6 +91,7 @@ class AuthService {
               .from('users')
               .upsert({
                 id: userProfile.id,
+                tenant_id: TENANT_ID,
                 azure_ad_id: accountId,
                 email: userProfile.email,
                 name: userProfile.name,
@@ -130,6 +133,7 @@ class AuthService {
           }
 
           const defaultUser: Partial<User> = {
+            tenant_id: TENANT_ID,
             azure_ad_id: accountId,
             email: userEmail,
             name: userName,
@@ -164,6 +168,7 @@ class AuthService {
         await supabase
           .from('users')
           .update({ last_login: new Date().toISOString() })
+          .eq('tenant_id', TENANT_ID)
           .eq('azure_ad_id', accountId)
 
         userProfile = user as User

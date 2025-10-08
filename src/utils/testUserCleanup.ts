@@ -12,6 +12,7 @@
  * - Rollback capability
  */
 
+import { TENANT_ID } from '@/config/tenantConfig'
 import { userManagementService, SystemUserWithCredentials } from '@/services/userManagementService'
 import { auditLogger } from '@/services/auditLogger'
 
@@ -191,7 +192,7 @@ export class TestUserCleanup {
       const backupKey = `userBackup_${timestamp}`
 
       // Get current users from localStorage
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       const currentUser = localStorage.getItem('currentUser')
 
       const backup = {
@@ -227,7 +228,7 @@ export class TestUserCleanup {
       console.log(`   User count: ${backup.userCount}`)
 
       if (backup.systemUsers) {
-        localStorage.setItem('systemUsers', JSON.stringify(backup.systemUsers))
+        localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(backup.systemUsers))
       }
 
       if (backup.currentUser) {

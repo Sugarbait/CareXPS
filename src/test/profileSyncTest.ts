@@ -1,3 +1,4 @@
+import { TENANT_ID } from '@/config/tenantConfig'
 import { robustProfileSyncService, ProfileData } from '@/services/robustProfileSyncService'
 import { supabaseConfig } from '@/config/supabase'
 
@@ -150,7 +151,7 @@ export class ProfileSyncTest {
         // Verify data persists in all localStorage locations
         const currentUser = localStorage.getItem('currentUser')
         const userProfile = localStorage.getItem(`userProfile_${testProfile.id}`)
-        const systemUsers = localStorage.getItem('systemUsers')
+        const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
 
         if (userProfile) {
           const parsedProfile = JSON.parse(userProfile)

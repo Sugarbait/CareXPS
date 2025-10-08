@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto-Fix Pierre Login</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 600px;
+      margin: 100px auto;
+      padding: 40px;
+      background: #1a1a2e;
+      color: #eee;
+      text-align: center;
+    }
+    .spinner {
+      border: 4px solid #333;
+      border-top: 4px solid #4ade80;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .success { color: #4ade80; }
+    .error { color: #f87171; }
+  </style>
+</head>
+<body>
+  <h1>🔧 Auto-Fixing Login...</h1>
+  <div class="spinner"></div>
+  <div id="status">Clearing browser storage...</div>
+
+  <script>
+    (async function autoFix() {
+      const status = document.getElementById('status')
+
+      function log(msg, type = 'info') {
+        console.log(msg)
+        const className = type === 'success' ? 'success' : type === 'error' ? 'error' : ''
+        status.innerHTML = `<div class="${className}">${msg}</div>`
+      }
+
+      try {
+        // Step 1: Clear everything
+        log('🗑️ Clearing localStorage...')
+        await new Promise(resolve => setTimeout(resolve, 500))
+        localStorage.clear()
+
+        log('🗑️ Clearing sessionStorage...')
+        await new Promise(resolve => setTimeout(resolve, 500))
+        sessionStorage.clear()
+
+        // Step 2: Clear IndexedDB
+        log('🗑️ Clearing IndexedDB...')
+        if (window.indexedDB) {
+          const databases = await indexedDB.databases()
+          for (const db of databases) {
+            indexedDB.deleteDatabase(db.name)
+          }
+        }
+
+        // Step 3: Clear cookies
+        log('🗑️ Clearing cookies...')
+        document.cookie.split(";").forEach(function(c) {
+          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
+        })
+
+        await new Promise(resolve => setTimeout(resolve, 1000))
+
+        log('✅ Storage cleared successfully!', 'success')
+
+        await new Promise(resolve => setTimeout(resolve, 1000))
+
+        log('🔄 Redirecting to login page...', 'success')
+
+        await new Promise(resolve => setTimeout(resolve, 1500))
+
+        // Redirect to login
+        window.location.href = '/'
+
+      } catch (error) {
+        log('❌ Error: ' + error.message, 'error')
+        console.error(error)
+      }
+    })()
+  </script>
+</body>
+</html>

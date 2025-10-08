@@ -1,3 +1,4 @@
+import { TENANT_ID } from '@/config/tenantConfig'
 import React, { useState, useEffect } from 'react'
 import {
   User,
@@ -469,7 +470,7 @@ export const EnhancedProfileSettings: React.FC<EnhancedProfileSettingsProps> = (
           }
 
           // Update systemUsers while preserving role
-          const systemUsers = localStorage.getItem('systemUsers')
+          const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
           if (systemUsers) {
             const users = JSON.parse(systemUsers)
             const userIndex = users.findIndex((u: any) => u.id === user.id)
@@ -484,7 +485,7 @@ export const EnhancedProfileSettings: React.FC<EnhancedProfileSettingsProps> = (
                 console.log(`✅ SYSTEM USERS: Preserved Super User role for ${user.email}`)
               }
 
-              localStorage.setItem('systemUsers', JSON.stringify(users))
+              localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(users))
             }
           }
 

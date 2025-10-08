@@ -4,6 +4,7 @@ import { avatarStorageService } from '@/services/avatarStorageService'
 import { realTimeSyncService } from '@/services/realTimeSyncService'
 import { auditLogger } from '@/services/auditLogger'
 import { ServiceResponse } from '@/types/supabase'
+import { TENANT_ID } from '@/config/tenantConfig'
 
 export interface ProfileSyncEvent {
   eventType: 'profile_updated' | 'avatar_changed' | 'field_updated'
@@ -473,14 +474,14 @@ export class EnhancedProfileSyncService {
       }
 
       // Update systemUsers
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (systemUsers) {
         const users = JSON.parse(systemUsers)
         const userIndex = users.findIndex((u: any) => u.id === this.userId)
         if (userIndex >= 0) {
           users[userIndex][fieldName] = value
           users[userIndex].updated_at = new Date().toISOString()
-          localStorage.setItem('systemUsers', JSON.stringify(users))
+          localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(users))
         }
       }
 

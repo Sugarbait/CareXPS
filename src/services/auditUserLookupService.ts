@@ -6,6 +6,7 @@
  */
 
 import { supabase } from '@/config/supabase'
+import { TENANT_ID } from '@/config/tenantConfig'
 
 export interface UserLookupResult {
   success: boolean
@@ -121,12 +122,12 @@ class AuditUserLookupService {
     try {
       const allKeys = Object.keys(localStorage)
 
-      // Check settings and user data keys
+      // Check settings and user data keys (TENANT-SPECIFIC ONLY)
       for (const key of allKeys) {
         if (key.startsWith('settings_') ||
             key.startsWith('user_') ||
             key.startsWith('profile_') ||
-            key === 'systemUsers') {
+            key === `systemUsers_${TENANT_ID}`) {
 
           try {
             const data = localStorage.getItem(key)
@@ -335,7 +336,7 @@ class AuditUserLookupService {
         }
       }
 
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (systemUsers) {
         const users = JSON.parse(systemUsers)
         if (Array.isArray(users)) {

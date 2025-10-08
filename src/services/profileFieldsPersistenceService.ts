@@ -1,5 +1,6 @@
 import { supabase } from '@/config/supabase'
 import { auditLogger } from './auditLogger'
+import { TENANT_ID } from '@/config/tenantConfig'
 
 /**
  * Service specifically for handling profile field persistence
@@ -286,14 +287,14 @@ export class ProfileFieldsPersistenceService {
       }
 
       // Update systemUsers array
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (systemUsers) {
         const users = JSON.parse(systemUsers)
         const userIndex = users.findIndex((u: any) => u.id === userId)
         if (userIndex >= 0) {
           Object.assign(users[userIndex], profileData)
           users[userIndex].updated_at = new Date().toISOString()
-          localStorage.setItem('systemUsers', JSON.stringify(users))
+          localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(users))
           console.log('✅ PROFILE PERSISTENCE: Updated systemUsers in localStorage')
         }
       }

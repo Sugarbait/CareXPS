@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Check ALL Users (Including Inactive)</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #00ff00;
+    }
+    h1 { color: #00ffff; }
+    .section { margin: 20px 0; padding: 10px; border: 1px solid #333; }
+    .success { color: #00ff00; }
+    .error { color: #ff0000; }
+    .warning { color: #ffaa00; }
+    pre { background: #000; padding: 10px; overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+    th, td { border: 1px solid #333; padding: 8px; text-align: left; }
+    th { background: #2a2a2a; }
+    .inactive { color: #ff6600; }
+  </style>
+</head>
+<body>
+  <h1>🔍 Check ALL Users (Active + Inactive)</h1>
+  <div id="output"></div>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+    const output = document.getElementById('output');
+
+    function log(message, type = 'info') {
+      const div = document.createElement('div');
+      div.className = `section ${type}`;
+      div.innerHTML = message;
+      output.appendChild(div);
+    }
+
+    async function checkAllUsers() {
+      log('🚀 Querying ALL users (including inactive)...', 'info');
+
+      const SUPABASE_URL = 'https://cpkslvmydfdevdftieck.supabase.co';
+      const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwa3Nsdm15ZGZkZXZkZnRpZWNrIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NjkwMDI5NSwiZXhwIjoyMDYyNDc2Mjk1fQ.5Nwr-DrgL63DwPMH2egxgdjoHGhAxCvIrz2SMTMKqD0';
+
+      const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+      // Query ALL users (no is_active filter)
+      const { data: allUsers, error } = await supabase
+        .from('users')
+        .select('email, name, tenant_id, is_active, role')
+        .order('tenant_id', { ascending: true });
+
+      if (error) {
+        log(`<strong>❌ Error:</strong><br><pre>${JSON.stringify(error, null, 2)}</pre>`, 'error');
+        return;
+      }
+
+      log(`<strong>📋 Total Users in Database: ${allUsers.length}</strong>`, 'info');
+
+      // Group by tenant
+      const byTenant = {
+        artlee: [],
+        medex: [],
+        carexps: [],
+        other: []
+      };
+
+      allUsers.forEach(u => {
+        if (u.tenant_id === 'artlee') byTenant.artlee.push(u);
+        else if (u.tenant_id === 'medex') byTenant.medex.push(u);
+        else if (u.tenant_id === 'carexps') byTenant.carexps.push(u);
+        else byTenant.other.push(u);
+      });
+
+      // Display ARTLEE users
+      log(`<strong>ARTLEE Users (tenant_id = "artlee"): ${byTenant.artlee.length}</strong>`,
+          byTenant.artlee.length > 0 ? 'success' : 'warning');
+      if (byTenant.artlee.length > 0) {
+        let table = '<table><tr><th>Email</th><th>Name</th><th>Active</th><th>Role</th></tr>';
+        byTenant.artlee.forEach(u => {
+          const activeClass = u.is_active ? 'success' : 'inactive';
+          table += `<tr class="${activeClass}"><td>${u.email}</td><td>${u.name || 'N/A'}</td><td>${u.is_active ? '✅ Yes' : '❌ No'}</td><td>${u.role}</td></tr>`;
+        });
+        table += '</table>';
+        log(table, 'info');
+      }
+
+      // Display MedEx users
+      log(`<strong>MedEx Users (tenant_id = "medex"): ${byTenant.medex.length}</strong>`,
+          byTenant.medex.length > 0 ? 'success' : 'warning');
+      if (byTenant.medex.length > 0) {
+        let table = '<table><tr><th>Email</th><th>Name</th><th>Active</th><th>Role</th></tr>';
+        byTenant.medex.forEach(u => {
+          const activeClass = u.is_active ? 'success' : 'inactive';
+          table += `<tr class="${activeClass}"><td>${u.email}</td><td>${u.name || 'N/A'}</td><td>${u.is_active ? '✅ Yes' : '❌ No'}</td><td>${u.role}</td></tr>`;
+        });
+        table += '</table>';
+        log(table, 'info');
+      }
+
+      // Display CareXPS users
+      log(`<strong>CareXPS Users (tenant_id = "carexps"): ${byTenant.carexps.length}</strong>`,
+          byTenant.carexps.length > 0 ? 'success' : 'warning');
+      if (byTenant.carexps.length > 0) {
+        let table = '<table><tr><th>Email</th><th>Name</th><th>Active</th><th>Role</th></tr>';
+        byTenant.carexps.forEach(u => {
+          const activeClass = u.is_active ? 'success' : 'inactive';
+          table += `<tr class="${activeClass}"><td>${u.email}</td><td>${u.name || 'N/A'}</td><td>${u.is_active ? '✅ Yes' : '❌ No'}</td><td>${u.role}</td></tr>`;
+        });
+        table += '</table>';
+        log(table, 'info');
+      }
+
+      // Display other tenants
+      if (byTenant.other.length > 0) {
+        log(`<strong>Other Tenants: ${byTenant.other.length}</strong>`, 'warning');
+        let table = '<table><tr><th>Email</th><th>Name</th><th>Tenant ID</th><th>Active</th><th>Role</th></tr>';
+        byTenant.other.forEach(u => {
+          const activeClass = u.is_active ? 'success' : 'inactive';
+          table += `<tr class="${activeClass}"><td>${u.email}</td><td>${u.name || 'N/A'}</td><td>${u.tenant_id}</td><td>${u.is_active ? '✅ Yes' : '❌ No'}</td><td>${u.role}</td></tr>`;
+        });
+        table += '</table>';
+        log(table, 'info');
+      }
+
+      // Summary
+      log(`<strong>📊 Summary:</strong><br>
+        - ARTLEE: ${byTenant.artlee.length} users (${byTenant.artlee.filter(u => u.is_active).length} active)<br>
+        - MedEx: ${byTenant.medex.length} users (${byTenant.medex.filter(u => u.is_active).length} active)<br>
+        - CareXPS: ${byTenant.carexps.length} users (${byTenant.carexps.filter(u => u.is_active).length} active)<br>
+        - Other: ${byTenant.other.length} users`, 'info');
+
+      log('✅ Complete!', 'success');
+    }
+
+    checkAllUsers().catch(error => {
+      log(`<strong>💥 Error:</strong><br><pre>${error.message}\n${error.stack}</pre>`, 'error');
+    });
+  </script>
+</body>
+</html>

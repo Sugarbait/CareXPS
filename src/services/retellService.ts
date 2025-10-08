@@ -35,6 +35,9 @@ export interface RetellCall {
     }>
     combined_cost: number
   }
+  telephony_identifier?: {
+    twilio_call_sid?: string
+  }
   metadata?: any
   disconnection_reason?: string
   from_number?: string

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CareXPS User Loading Diagnostic</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #00ff00;
+    }
+    h1 { color: #00ffff; }
+    .step { margin: 20px 0; padding: 10px; border: 1px solid #333; }
+    .success { color: #00ff00; }
+    .error { color: #ff0000; }
+    .warning { color: #ffaa00; }
+    pre { background: #000; padding: 10px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>🔍 CareXPS User Loading Diagnostic</h1>
+  <div id="output"></div>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+    const output = document.getElementById('output');
+
+    function log(message, type = 'info') {
+      const div = document.createElement('div');
+      div.className = `step ${type}`;
+      div.innerHTML = message;
+      output.appendChild(div);
+    }
+
+    async function runDiagnostic() {
+      log('🚀 Starting diagnostic...', 'info');
+
+      // Step 1: Check tenant ID
+      const tenantId = 'carexps';
+      log(`<strong>Step 1: Tenant ID</strong><br>Using tenant_id: "${tenantId}"`, 'success');
+
+      // Step 2: Initialize Supabase
+      const SUPABASE_URL = 'https://cpkslvmydfdevdftieck.supabase.co';
+      const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwa3Nsdm15ZGZkZXZkZnRpZWNrIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NjkwMDI5NSwiZXhwIjoyMDYyNDc2Mjk1fQ.5Nwr-DrgL63DwPMH2egxgdjoHGhAxCvIrz2SMTMKqD0';
+
+      const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+      log('<strong>Step 2: Supabase</strong><br>✅ Supabase client initialized', 'success');
+
+      // Step 3: Query users
+      log('<strong>Step 3: Querying users...</strong>', 'info');
+
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        log(`<strong>❌ Query Error:</strong><br><pre>${JSON.stringify(error, null, 2)}</pre>`, 'error');
+        return;
+      }
+
+      log(`<strong>✅ Query Success</strong><br>Found ${users.length} users`, 'success');
+      log(`<pre>${JSON.stringify(users, null, 2)}</pre>`, 'info');
+
+      // Step 4: Check each user
+      if (users.length === 0) {
+        log('<strong>⚠️ No users found!</strong>', 'warning');
+
+        // Check without tenant filter
+        log('<strong>Step 4: Checking ALL users (no tenant filter)...</strong>', 'info');
+        const { data: allUsers } = await supabase
+          .from('users')
+          .select('email, tenant_id, is_active, role');
+
+        log(`<pre>${JSON.stringify(allUsers, null, 2)}</pre>`, 'info');
+      } else {
+        log(`<strong>Step 4: User Details</strong>`, 'info');
+        users.forEach(user => {
+          log(`
+            📧 <strong>${user.email}</strong><br>
+            - Name: ${user.name}<br>
+            - Role: ${user.role}<br>
+            - Tenant: ${user.tenant_id}<br>
+            - Active: ${user.is_active}<br>
+            - Created: ${user.created_at}
+          `, 'success');
+        });
+      }
+
+      log('✅ Diagnostic complete!', 'success');
+    }
+
+    runDiagnostic().catch(error => {
+      log(`<strong>💥 Diagnostic failed:</strong><br><pre>${error.message}\n${error.stack}</pre>`, 'error');
+    });
+  </script>
+</body>
+</html>

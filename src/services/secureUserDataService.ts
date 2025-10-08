@@ -10,6 +10,7 @@ import { secureLogger } from '@/services/secureLogger'
 import { encryptionService } from '@/services/encryption'
 import { secureApiService } from '@/services/secureApiService'
 import { User } from '@/types'
+import { TENANT_ID } from '@/config/tenantConfig'
 
 const logger = secureLogger.component('SecureUserDataService')
 
@@ -348,12 +349,12 @@ class SecureUserDataService {
       }
 
       // Migrate systemUsers
-      const systemUsersData = localStorage.getItem('systemUsers')
+      const systemUsersData = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (systemUsersData) {
         try {
           const usersData = JSON.parse(systemUsersData)
           await this.setSystemUsers(usersData)
-          localStorage.removeItem('systemUsers')
+          localStorage.removeItem(`systemUsers_${TENANT_ID}`)
           logger.info('Migrated systemUsers to secure storage')
         } catch (error) {
           logger.warn('Failed to migrate systemUsers', undefined, undefined, {

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CareXPS Login Helper</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .user-card {
+      background: white;
+      padding: 20px;
+      margin: 10px 0;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    .success {
+      color: #4CAF50;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔑 CareXPS Login Helper</h1>
+  <p><strong>ORIGINAL PASSWORDS RESTORED</strong></p>
+  <p>Click "Setup Login" for each user to enable password authentication:</p>
+
+  
+    <div class="user-card">
+      <h3>pierre@phaetonai.com</h3>
+      <p><strong>Role:</strong> super_user</p>
+      <p><strong>Password:</strong> $Ineed1millie$_carexps <em>(ORIGINAL)</em></p>
+      <button onclick="setupUser('bdb5777a-924f-4724-9789-3ca2734540b8', 'pierre@phaetonai.com', 'JEluZWVkMW1pbGxpZSRfY2FyZXhwcw==', '$Ineed1millie$_carexps')">
+        Setup Login
+      </button>
+      <span id="status-bdb5777a-924f-4724-9789-3ca2734540b8"></span>
+    </div>
+    
+    <div class="user-card">
+      <h3>elmfarrell@yahoo.com</h3>
+      <p><strong>Role:</strong> super_user</p>
+      <p><strong>Password:</strong> Farrell1000! <em>(ORIGINAL)</em></p>
+      <button onclick="setupUser('d0781f21-732a-46c1-bab2-11a4448bb1f9', 'elmfarrell@yahoo.com', 'RmFycmVsbDEwMDAh', 'Farrell1000!')">
+        Setup Login
+      </button>
+      <span id="status-d0781f21-732a-46c1-bab2-11a4448bb1f9"></span>
+    </div>
+    
+
+  <script>
+    async function setupUser(userId, email, base64Password, plainPassword) {
+      const statusEl = document.getElementById('status-' + userId)
+      statusEl.innerHTML = '⏳ Setting up...'
+
+      try {
+        // Store in multiple locations for redundancy
+        localStorage.setItem('user_' + userId + '_password', base64Password)
+        localStorage.setItem('auth_' + email.replace('@', '_').replace(/\./g, '_'), base64Password)
+        localStorage.setItem('credentials_' + email, JSON.stringify({
+          email: email,
+          password: plainPassword,
+          base64: base64Password
+        }))
+
+        statusEl.innerHTML = '<span class="success">✅ Ready to login!</span>'
+        console.log('Setup complete for:', email)
+      } catch (error) {
+        statusEl.innerHTML = '❌ Error: ' + error.message
+        console.error('Setup failed:', error)
+      }
+    }
+
+    // Auto-setup all users
+    window.addEventListener('load', () => {
+      console.log('Login helper loaded. Users available for setup.')
+    })
+  </script>
+</body>
+</html>

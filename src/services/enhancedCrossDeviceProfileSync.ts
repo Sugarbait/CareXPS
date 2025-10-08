@@ -3,6 +3,7 @@ import { auditLogger } from './auditLogger'
 import { avatarStorageService } from './avatarStorageService'
 import { userProfileService } from './userProfileService'
 import { profileFieldsPersistenceService } from './profileFieldsPersistenceService'
+import { TENANT_ID } from '@/config/tenantConfig'
 
 /**
  * Enhanced Cross-Device Profile Synchronization Service
@@ -659,14 +660,14 @@ export class EnhancedCrossDeviceProfileSync {
    */
   private updateSystemUsers(data: Partial<ProfileSyncData>): void {
     try {
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (systemUsers) {
         const users = JSON.parse(systemUsers)
         const userIndex = users.findIndex((u: any) => u.id === this.userId)
         if (userIndex >= 0) {
           Object.assign(users[userIndex], data)
           users[userIndex].updated_at = new Date().toISOString()
-          localStorage.setItem('systemUsers', JSON.stringify(users))
+          localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(users))
         }
       }
     } catch (error) {

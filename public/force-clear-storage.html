@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Force Clear Storage - Pierre Login Fix</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+    }
+    .container {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 2em;
+      text-align: center;
+    }
+    .status {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 15px;
+      border-radius: 10px;
+      margin: 20px 0;
+      font-family: 'Courier New', monospace;
+      white-space: pre-wrap;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    button {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      font-size: 1.1em;
+      border-radius: 10px;
+      cursor: pointer;
+      width: 100%;
+      margin: 10px 0;
+      transition: transform 0.2s;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .success { color: #4ade80; font-weight: bold; }
+    .warning { color: #fbbf24; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧹 Force Clear Storage</h1>
+    <p>This will completely clear all localStorage data and fix the "dynamic-pierre-user" issue.</p>
+
+    <button onclick="forceClearAll()">🔥 Clear All Storage & Fix Login</button>
+
+    <div id="status" class="status"></div>
+  </div>
+
+  <script>
+    function log(message, type = 'info') {
+      const statusDiv = document.getElementById('status')
+      const timestamp = new Date().toLocaleTimeString()
+      const className = type === 'success' ? 'success' : type === 'warning' ? 'warning' : ''
+      statusDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`
+      statusDiv.scrollTop = statusDiv.scrollHeight
+    }
+
+    function forceClearAll() {
+      log('🧹 Starting complete storage cleanup...', 'info')
+
+      // Step 1: List all localStorage keys
+      log('\n📋 Current localStorage keys:', 'info')
+      const keys = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        keys.push(key)
+        log(`   - ${key}`, 'info')
+      }
+
+      log(`\n   Total: ${keys.length} keys found`, 'info')
+
+      // Step 2: Clear localStorage
+      log('\n🗑️  Clearing localStorage...', 'info')
+      localStorage.clear()
+      log('✅ localStorage cleared!', 'success')
+
+      // Step 3: Clear sessionStorage
+      log('\n🗑️  Clearing sessionStorage...', 'info')
+      sessionStorage.clear()
+      log('✅ sessionStorage cleared!', 'success')
+
+      // Step 4: Clear IndexedDB
+      log('\n🗑️  Clearing IndexedDB...', 'info')
+      if (window.indexedDB) {
+        indexedDB.databases().then(databases => {
+          databases.forEach(db => {
+            indexedDB.deleteDatabase(db.name)
+            log(`   Deleted: ${db.name}`, 'info')
+          })
+          log('✅ IndexedDB cleared!', 'success')
+        })
+      }
+
+      // Step 5: Clear cookies
+      log('\n🗑️  Clearing cookies...', 'info')
+      document.cookie.split(";").forEach(function(c) {
+        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
+      })
+      log('✅ Cookies cleared!', 'success')
+
+      // Step 6: Set proper initial state
+      log('\n🔧 Setting up clean state...', 'info')
+
+      // Set the correct user in localStorage
+      const correctUser = {
+        id: 'd500a835-5d22-476d-85bf-60acacb1acb3',
+        email: 'pierre@phaetonai.com',
+        name: 'Pierre Morenzie',
+        role: 'super_user',
+        isActive: true,
+        mfaEnabled: false,
+        tenant_id: 'carexps'
+      }
+
+      localStorage.setItem('currentUser', JSON.stringify(correctUser))
+      log('✅ Set correct user data', 'success')
+
+      // Set credentials
+      const credentials = {
+        apiKey: 'key_c3f084f5ca67781070e188b47d7f',
+        callAgentId: 'agent_447a1b9da540237693b0440df6',
+        smsAgentId: 'agent_643486efd4b5a0e9d7e094ab99'
+      }
+
+      localStorage.setItem('retellApiKey', credentials.apiKey)
+      localStorage.setItem('callAgentId', credentials.callAgentId)
+      localStorage.setItem('smsAgentId', credentials.smsAgentId)
+      log('✅ Set Retell AI credentials', 'success')
+
+      log('\n🎉 CLEANUP COMPLETE!', 'success')
+      log('\n💡 Next steps:', 'warning')
+      log('   1. Close this tab', 'info')
+      log('   2. Open a new tab and go to the login page', 'info')
+      log('   3. Log in with:', 'info')
+      log('      Email: pierre@phaetonai.com', 'info')
+      log('      Password: $Ineed1millie$_carexps', 'info')
+      log('\n   The "dynamic-pierre-user" issue should be fixed!', 'success')
+
+      setTimeout(() => {
+        if (confirm('Storage cleared! Click OK to redirect to login page.')) {
+          window.location.href = '/'
+        }
+      }, 2000)
+    }
+
+    // Auto-run on page load
+    window.addEventListener('load', () => {
+      log('🚀 Storage Cleanup Tool Loaded', 'info')
+      log('Click the button above to clear all storage and fix login issues.', 'info')
+    })
+  </script>
+</body>
+</html>

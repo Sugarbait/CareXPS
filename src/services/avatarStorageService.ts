@@ -1,6 +1,7 @@
 import { supabase } from '@/config/supabase'
 import { ServiceResponse } from '@/types/supabase'
 import { auditLogger } from './auditLogger'
+import { TENANT_ID } from '@/config/tenantConfig'
 
 export interface AvatarInfo {
   url: string
@@ -167,7 +168,7 @@ export class AvatarStorageService {
       }
 
       // 4. Check systemUsers array
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (systemUsers) {
         try {
           const users = JSON.parse(systemUsers)
@@ -244,6 +245,7 @@ export class AvatarStorageService {
       const { data: user, error } = await supabase
         .from('users')
         .select('avatar_url')
+        .eq('tenant_id', TENANT_ID)
         .eq('id', userId)
         .single()
 
@@ -273,6 +275,7 @@ export class AvatarStorageService {
       const { data: user, error } = await supabase
         .from('users')
         .select('avatar_url')
+        .eq('tenant_id', TENANT_ID)
         .eq('email', email)
         .single()
 
@@ -303,6 +306,7 @@ export class AvatarStorageService {
       const { data: user, error } = await supabase
         .from('users')
         .select('avatar_url')
+        .eq('tenant_id', TENANT_ID)
         .eq('id', userId)
         .single()
 
@@ -580,6 +584,7 @@ export class AvatarStorageService {
       const { data: currentUser, error: fetchError } = await supabase
         .from('users')
         .select('role, email')
+        .eq('tenant_id', TENANT_ID)
         .eq('id', userId)
         .single()
 
@@ -602,6 +607,7 @@ export class AvatarStorageService {
       const { error: dbError } = await supabase
         .from('users')
         .update(updateData)
+        .eq('tenant_id', TENANT_ID)
         .eq('id', userId)
 
       if (dbError) {
@@ -691,7 +697,7 @@ export class AvatarStorageService {
    */
   private static async updateLocalUserData(userId: string, avatarUrl: string | null): Promise<void> {
     try {
-      const storedUsers = localStorage.getItem('systemUsers')
+      const storedUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (storedUsers) {
         const users = JSON.parse(storedUsers)
         const userIndex = users.findIndex((u: any) => u.id === userId)
@@ -710,7 +716,7 @@ export class AvatarStorageService {
           }
 
           users[userIndex].updated_at = new Date().toISOString()
-          localStorage.setItem('systemUsers', JSON.stringify(users))
+          localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(users))
         }
       }
 
@@ -803,6 +809,7 @@ export class AvatarStorageService {
       const { data: user } = await supabase
         .from('users')
         .select('avatar_url')
+        .eq('tenant_id', TENANT_ID)
         .eq('id', userId)
         .single()
 
@@ -911,6 +918,7 @@ export class AvatarStorageService {
       const { data: users, error: usersError } = await supabase
         .from('users')
         .select('id, avatar_url')
+        .eq('tenant_id', TENANT_ID)
         .not('avatar_url', 'is', null)
 
       if (usersError) {

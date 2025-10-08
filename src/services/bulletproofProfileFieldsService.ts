@@ -8,6 +8,7 @@
 import { supabase, supabaseConfig } from '@/config/supabase'
 import { ServiceResponse } from '@/types/supabase'
 import { auditLogger } from './auditLogger'
+import { TENANT_ID } from '@/config/tenantConfig'
 
 export interface ProfileFields {
   department: string
@@ -341,7 +342,7 @@ export class BulletproofProfileFieldsService {
       }
 
       // Also update systemUsers
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (systemUsers) {
         const users = JSON.parse(systemUsers)
         const userIndex = users.findIndex((u: any) => u.id === userId)
@@ -351,7 +352,7 @@ export class BulletproofProfileFieldsService {
             ...fields,
             updated_at: new Date().toISOString()
           }
-          localStorage.setItem('systemUsers', JSON.stringify(users))
+          localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(users))
           console.log('✅ BULLETPROOF PROFILE: Updated systemUsers')
           return true
         }

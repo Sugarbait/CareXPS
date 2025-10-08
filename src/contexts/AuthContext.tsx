@@ -11,6 +11,7 @@ import { retellService } from '@/services'
 import { AvatarStorageService } from '@/services/avatarStorageService'
 import { MfaLockoutService } from '@/services/mfaLockoutService'
 import { getBulletproofCredentials, storeCredentialsEverywhere, validateCredentials } from '@/config/retellCredentials'
+import { TENANT_ID } from '@/config/tenantConfig'
 
 const logger = secureLogger.component('AuthContext')
 
@@ -290,6 +291,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               const { error: lastLoginError } = await supabase
                 .from('users')
                 .update({ last_login: new Date().toISOString() })
+                .eq('tenant_id', TENANT_ID)
                 .eq('id', userProfile.id)
 
               if (lastLoginError) {
@@ -297,7 +299,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               } else {
                 console.log('✅ Updated last_login timestamp for authenticated user:', userProfile.id)
                 // Clear cached systemUsers to force refresh on User Management page
-                localStorage.removeItem('systemUsers')
+                localStorage.removeItem(`systemUsers_${TENANT_ID}`)
                 console.log('🧹 Cleared systemUsers cache to show updated last_login')
               }
             } catch (loginUpdateError) {
@@ -807,6 +809,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           const { error: lastLoginError } = await supabase
             .from('users')
             .update({ last_login: new Date().toISOString() })
+            .eq('tenant_id', TENANT_ID)
             .eq('id', userProfile.id)
 
           if (lastLoginError) {
@@ -814,7 +817,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           } else {
             console.log('✅ Updated last_login timestamp after MFA:', userProfile.id)
             // Clear cached systemUsers to force refresh on User Management page
-            localStorage.removeItem('systemUsers')
+            localStorage.removeItem(`systemUsers_${TENANT_ID}`)
             console.log('🧹 Cleared systemUsers cache to show updated last_login')
           }
         } catch (loginUpdateError) {

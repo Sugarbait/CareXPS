@@ -3,13 +3,14 @@
  * Run this in the browser console to fix the duplicate Guest issue
  */
 
+import { TENANT_ID } from '@/config/tenantConfig'
 import { completeGuestCleanup } from './cleanupDuplicateGuests'
 
 export async function runGuestCleanupNow() {
   console.log('=== STARTING GUEST USER CLEANUP ===')
 
   // Show current state
-  const storedUsers = localStorage.getItem('systemUsers')
+  const storedUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
   if (storedUsers) {
     try {
       const users = JSON.parse(storedUsers)
@@ -34,7 +35,7 @@ export async function runGuestCleanupNow() {
   console.log(`Overall success: ${result.success}`)
 
   // Show final state
-  const finalUsers = localStorage.getItem('systemUsers')
+  const finalUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
   if (finalUsers) {
     try {
       const users = JSON.parse(finalUsers)

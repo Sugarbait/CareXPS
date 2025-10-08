@@ -6,6 +6,7 @@
  * and Super User profiles.
  */
 
+import { TENANT_ID } from '@/config/tenantConfig'
 import { supabase } from '@/config/supabase'
 
 interface UserProfile {
@@ -46,7 +47,7 @@ export class UserRolePersistenceFixer {
     }
 
     // 2. Check systemUsers
-    const systemUsers = localStorage.getItem('systemUsers')
+    const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
     if (systemUsers) {
       try {
         const users = JSON.parse(systemUsers)
@@ -105,7 +106,7 @@ export class UserRolePersistenceFixer {
 
     try {
       // 1. Find the Super User in localStorage
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       let superUser: UserProfile | null = null
 
       if (systemUsers) {
@@ -198,7 +199,7 @@ export class UserRolePersistenceFixer {
         } else {
           users.push(updatedUser)
         }
-        localStorage.setItem('systemUsers', JSON.stringify(users))
+        localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(users))
       }
 
       console.log('✅ Role persistence fix completed!')
@@ -253,10 +254,10 @@ export class UserRolePersistenceFixer {
     // Update localStorage
     localStorage.setItem('currentUser', JSON.stringify(superUser))
 
-    const systemUsers = localStorage.getItem('systemUsers')
+    const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
     let users = systemUsers ? JSON.parse(systemUsers) : []
     users.push(superUser)
-    localStorage.setItem('systemUsers', JSON.stringify(users))
+    localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(users))
 
     console.log('✅ Super User creation completed!')
   }

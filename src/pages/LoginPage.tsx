@@ -211,8 +211,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           // Admin exists, ensure password is set correctly
           console.log('Admin user already exists, updating credentials...')
           const userId = adminResponse.data.id
-          await PasswordDebugger.setUserPassword(userId, 'pierre@phaetonai.com', '$Ineed1millie$_carexps')
-          console.log('Admin user credentials updated successfully')
+          await PasswordDebugger.setUserPassword(userId, 'pierre@phaetonai.com', '$Ineed1millie$_carexps')  // ORIGINAL PASSWORD
+          console.log('Admin user ORIGINAL credentials restored successfully')
         }
       } catch (error) {
         console.log('User check/creation error:', error)
@@ -903,6 +903,104 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     }
   }
 
+  // Password Debugger utility
+  const PasswordDebugger = {
+    async setUserPassword(userId: string, email: string, password: string): Promise<void> {
+      try {
+        const base64Password = btoa(password)
+
+        // Store in multiple locations for redundancy
+        localStorage.setItem(`user_${userId}_password`, base64Password)
+        localStorage.setItem(`auth_${email.replace('@', '_').replace(/\./g, '_')}`, base64Password)
+        localStorage.setItem(`credentials_${email}`, JSON.stringify({
+          email,
+          password,
+          base64: base64Password
+        }))
+
+        console.log(`✅ Password set for ${email}`)
+      } catch (error) {
+        console.error(`❌ Failed to set password for ${email}:`, error)
+        throw error
+      }
+    }
+  }
+
+  // Setup all user credentials - ORIGINAL PASSWORDS
+  const setupAllUserCredentials = async (): Promise<{success: boolean, error?: string}> => {
+    try {
+      console.log('🔑 Restoring ORIGINAL credentials for all users...')
+
+      const userPasswords = {
+        'pierre@phaetonai.com': '$Ineed1millie$_carexps',  // ORIGINAL PASSWORD
+        'elmfarrell@yahoo.com': 'Farrell1000!',             // ORIGINAL PASSWORD
+        'guest@email.com': 'Guest1000!'
+      }
+
+      for (const [email, password] of Object.entries(userPasswords)) {
+        // Get user from database
+        const userResponse = await userProfileService.getUserByEmail(email)
+        if (userResponse.status === 'success' && userResponse.data) {
+          const userId = userResponse.data.id
+          await PasswordDebugger.setUserPassword(userId, email, password)
+          console.log(`✅ Credentials set for ${email}`)
+        } else {
+          console.log(`⚠️  User not found: ${email}`)
+        }
+      }
+
+      console.log('✅ All ORIGINAL user credentials have been restored!')
+      console.log('\nORIGINAL Login credentials:')
+      for (const [email, password] of Object.entries(userPasswords)) {
+        console.log(`  📧 ${email}`)
+        console.log(`  🔑 ${password}`)
+      }
+
+      return { success: true }
+    } catch (error: any) {
+      console.error('❌ Credential setup failed:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Test all user authentication - ORIGINAL PASSWORDS
+  const testAllUserAuthentication = async (): Promise<void> => {
+    console.log('🧪 Testing authentication with ORIGINAL passwords...')
+
+    const testUsers = [
+      { email: 'pierre@phaetonai.com', password: '$Ineed1millie$_carexps' },  // ORIGINAL
+      { email: 'elmfarrell@yahoo.com', password: 'Farrell1000!' },             // ORIGINAL
+      { email: 'guest@email.com', password: 'Guest1000!' }
+    ]
+
+    for (const { email, password } of testUsers) {
+      try {
+        const userResponse = await userProfileService.getUserByEmail(email)
+        if (userResponse.status === 'success' && userResponse.data) {
+          console.log(`✅ ${email}: User exists in database`)
+
+          // Check if credentials are stored
+          const userId = userResponse.data.id
+          const storedPassword = localStorage.getItem(`user_${userId}_password`)
+          if (storedPassword) {
+            const decodedPassword = atob(storedPassword)
+            if (decodedPassword === password) {
+              console.log(`   ✅ Password matches`)
+            } else {
+              console.log(`   ❌ Password mismatch (stored: ${decodedPassword})`)
+            }
+          } else {
+            console.log(`   ⚠️  No password stored`)
+          }
+        } else {
+          console.log(`❌ ${email}: User not found in database`)
+        }
+      } catch (error) {
+        console.error(`❌ ${email}: Error checking user`, error)
+      }
+    }
+  }
+
   // Helper method for demo account handling
   const handleDemoAccountLogin = async (email: string, password: string): Promise<boolean> => {
     let demoUserData = null
@@ -929,10 +1027,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       }
     }
 
-    // Check built-in system accounts - now uses dynamic password verification
+    // Check built-in system accounts - ORIGINAL PASSWORD
     if (email === 'elmfarrell@yahoo.com') {
-      // Try stored credentials first, fall back to default password
-      const isValidPassword = await checkDemoUserPassword('super-user-456', password) || password === 'Farrell1000!'
+      // Try stored credentials first, fall back to ORIGINAL password
+      const isValidPassword = await checkDemoUserPassword('super-user-456', password) || password === 'Farrell1000!'  // ORIGINAL
       if (isValidPassword) {
         demoUserData = {
           id: 'super-user-456',
