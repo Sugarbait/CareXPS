@@ -940,33 +940,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
       try {
         // Get SMS agent ID from settings
 
-        // Get SMS agent ID from settings with fallback handling
-        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}')
-        let SMS_AGENT_ID = null
+        // CRITICAL: Use hardcoded CareXPS SMS agent ID for data isolation
+        const CAREXPS_SMS_AGENT_ID = 'agent_643486efd4b5a0e9d7e094ab99'
+        const SMS_AGENT_ID = CAREXPS_SMS_AGENT_ID
 
-        if (currentUser.id) {
-          try {
-            const settingsData = await userSettingsService.getUserSettings(currentUser.id)
-            if (settingsData?.retell_config) {
-              SMS_AGENT_ID = settingsData.retell_config.sms_agent_id || null
-            }
-          } catch (error) {
-            console.log('Supabase connection failed, falling back to localStorage settings')
-            // Fallback to localStorage settings when Supabase is not available
-            try {
-              const localSettings = JSON.parse(localStorage.getItem(`settings_${currentUser.id}`) || '{}')
-              SMS_AGENT_ID = localSettings.smsAgentId || null
-            } catch (localError) {
-              console.log('localStorage fallback also failed, continuing without SMS agent filter')
-              SMS_AGENT_ID = null
-            }
-          }
-        }
+        console.log(`🔒 Dashboard filtering SMS chats by CareXPS agent: ${SMS_AGENT_ID}`)
 
         // Filter chats by date range AND SMS agent like SMS page does
         const filteredChats = allChatsResponse.chats.filter(chat => {
-          // If SMS_AGENT_ID is configured, filter by it; otherwise show all chats
-          if (SMS_AGENT_ID && chat.agent_id !== SMS_AGENT_ID) return false
+          // CRITICAL: Always filter by CareXPS SMS agent ID - exclude Medex and other apps
+          if (chat.agent_id !== SMS_AGENT_ID) {
+            console.log(`🚫 Excluding chat ${chat.chat_id} from agent ${chat.agent_id} (not CareXPS SMS agent)`)
+            return false
+          }
 
           // Check if timestamp is in seconds (10 digits) or milliseconds (13+ digits)
           let chatTimeMs: number

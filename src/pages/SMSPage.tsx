@@ -156,9 +156,8 @@ export const SMSPage: React.FC<SMSPageProps> = ({ user }) => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
   const [sentimentFilter, setSentimentFilter] = useState('all')
-  const [isFuzzySearchEnabled, setIsFuzzySearchEnabled] = useState(true)
+  const [isFuzzySearchEnabled] = useState(false) // Regular search only
   const [selectedDateRange, setSelectedDateRange] = useState<DateRange>(() => {
     // Remember last selected date range from localStorage
     const saved = localStorage.getItem('sms_page_date_range')
@@ -644,7 +643,6 @@ export const SMSPage: React.FC<SMSPageProps> = ({ user }) => {
     maxWait: 2000
   })
 
-  const { debouncedValue: debouncedStatusFilter } = useDebounce(statusFilter, 300)
   const { debouncedValue: debouncedSentimentFilter } = useDebounce(sentimentFilter, 300)
 
   // Note: debouncedFetchChats is defined after fetchChatsOptimized (around line 1156)
@@ -1045,14 +1043,6 @@ export const SMSPage: React.FC<SMSPageProps> = ({ user }) => {
       // WORKING CALLS PAGE PATTERN: Simple and reliable
       console.log('🔄 [SMSPage] Using PROVEN Calls page pattern...')
 
-      // FORCE HARDWIRED CREDENTIALS FIRST
-      console.log('🔧 [SMSPage] FORCING hardwired credentials immediately...')
-      retellService.updateCredentials(
-        'key_c3f084f5ca67781070e188b47d7f',
-        'agent_447a1b9da540237693b0440df6',
-        'agent_643486efd4b5a0e9d7e094ab99'
-      )
-
       // Reload credentials (localStorage + Supabase sync) - EXACT CALLS PAGE PATTERN
       await retellService.loadCredentialsAsync()
       safeLog('✅ [SMSPage] Reloaded credentials with cross-device sync:', {
@@ -1062,11 +1052,22 @@ export const SMSPage: React.FC<SMSPageProps> = ({ user }) => {
 
       // Check if Retell API has at minimum an API key configured - EXACT CALLS PAGE PATTERN
       const hasApiKey = !!retellService.getApiKey()
+      const apiKeyValue = retellService.getApiKey()
       console.log('🟡 [SMS DEBUG] API key check - hasApiKey:', hasApiKey)
-      console.log('🟡 [SMS DEBUG] retellService.getApiKey():', retellService.getApiKey())
+      console.log('🟡 [SMS DEBUG] retellService.getApiKey():', apiKeyValue)
 
-      if (!hasApiKey) {
-        console.log('🔴 [SMS DEBUG] Early exit: No API key found')
+      // If API key is explicitly empty or cleared, show empty state
+      if (!hasApiKey || !apiKeyValue || apiKeyValue.trim() === '') {
+        console.log('🔴 [SMS DEBUG] Early exit: No API key found or API key cleared by user')
+        setChats([])
+        setMetrics({
+          totalChats: 0,
+          avgDuration: '0:00',
+          avgResponseTime: '0s',
+          successRate: 0,
+          totalSMSSegments: 0,
+          totalCost: 0
+        })
         setError('API not configured. Go to Settings → API Configuration to set up your credentials.')
         setLoading(false)
         return
@@ -1176,8 +1177,22 @@ export const SMSPage: React.FC<SMSPageProps> = ({ user }) => {
         return isInRange
       })
 
+      // CRITICAL: Filter by CareXPS SMS agent ID ONLY - exclude Medex and other apps
+      const CAREXPS_SMS_AGENT_ID = 'agent_643486efd4b5a0e9d7e094ab99'
+      const agentFiltered = dateFiltered.filter(chat => {
+        const isCarexpsChat = chat.agent_id === CAREXPS_SMS_AGENT_ID
+
+        if (!isCarexpsChat) {
+          safeLog(`🚫 Excluding chat ${chat.chat_id} from agent ${chat.agent_id} (not CareXPS SMS agent)`)
+        }
+
+        return isCarexpsChat
+      })
+
+      safeLog(`🔒 Agent filtering: ${dateFiltered.length} chats → ${agentFiltered.length} CareXPS chats (excluded ${dateFiltered.length - agentFiltered.length} from other agents)`)
+
       // Store all date-filtered chats for filtering in useMemo (like calls page)
-      const totalChats = dateFiltered
+      const totalChats = agentFiltered
 
       safeLog(`📊 After date filtering: ${totalChats.length} chats in date range ${selectedDateRange}`)
       safeLog(`📅 Date range: ${start.toLocaleString()} to ${end.toLocaleString()}`)
@@ -1279,13 +1294,12 @@ export const SMSPage: React.FC<SMSPageProps> = ({ user }) => {
   // Fetch when debounced filters change - defined after debouncedFetchChats
   useEffect(() => {
     if (debouncedSearchTerm !== searchTerm ||
-        debouncedStatusFilter !== statusFilter ||
         debouncedSentimentFilter !== sentimentFilter) {
       return // Wait for debouncing to complete
     }
     setCurrentPage(1)
     debouncedFetchChats(true)
-  }, [debouncedSearchTerm, debouncedStatusFilter, debouncedSentimentFilter, debouncedFetchChats])
+  }, [debouncedSearchTerm, debouncedSentimentFilter, debouncedFetchChats])
 
   // Auto-refresh functionality like other pages - defined after fetchChatsOptimized
   const { formatLastRefreshTime } = useAutoRefresh({
@@ -1625,10 +1639,10 @@ export const SMSPage: React.FC<SMSPageProps> = ({ user }) => {
 
   const getSentimentColor = (sentiment?: string) => {
     switch (sentiment) {
-      case 'positive': return 'text-green-600 bg-green-50 border-green-200'
-      case 'negative': return 'text-red-600 bg-red-50 border-red-200'
-      case 'neutral': return 'text-yellow-600 bg-yellow-50 border-yellow-200'
-      default: return 'text-gray-600 bg-gray-50 border-gray-200'
+      case 'positive': return 'text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700'
+      case 'negative': return 'text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700'
+      case 'neutral': return 'text-yellow-700 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700'
+      default: return 'text-gray-700 dark:text-gray-400 bg-gray-100 dark:bg-gray-800/30 border-gray-300 dark:border-gray-600'
     }
   }
 
@@ -1838,19 +1852,18 @@ export const SMSPage: React.FC<SMSPageProps> = ({ user }) => {
       }
     }
 
-    // Apply status and sentiment filters to search results
+    // Apply sentiment filter to search results
     const fullyFilteredChats = searchFilteredChats.filter(chat => {
-      const matchesStatus = debouncedStatusFilter === 'all' || chat.chat_status === debouncedStatusFilter
-      const matchesSentiment = debouncedSentimentFilter === 'all' || chat.chat_analysis?.user_sentiment === debouncedSentimentFilter
+      const matchesSentiment = debouncedSentimentFilter === 'all' || chat.chat_analysis?.user_sentiment?.toLowerCase() === debouncedSentimentFilter
 
-      return matchesStatus && matchesSentiment
+      return matchesSentiment
     })
 
     // Apply pagination to filtered results (CallsPage pattern)
     const startIndex = (currentPage - 1) * recordsPerPage
     const endIndex = startIndex + recordsPerPage
     return fullyFilteredChats.slice(startIndex, endIndex)
-  }, [chats, debouncedSearchTerm, debouncedStatusFilter, debouncedSentimentFilter, isFuzzySearchEnabled, currentPage, recordsPerPage])
+  }, [chats, debouncedSearchTerm, debouncedSentimentFilter, isFuzzySearchEnabled, currentPage, recordsPerPage])
 
   // Calculate total filtered count (before pagination) for pagination display
   const filteredChatsCount = React.useMemo(() => {
@@ -1872,21 +1885,20 @@ export const SMSPage: React.FC<SMSPageProps> = ({ user }) => {
       }
     }
 
-    // Apply status and sentiment filters to search results
+    // Apply sentiment filter to search results
     const fullyFilteredChats = searchFilteredChats.filter(chat => {
-      const matchesStatus = debouncedStatusFilter === 'all' || chat.chat_status === debouncedStatusFilter
-      const matchesSentiment = debouncedSentimentFilter === 'all' || chat.chat_analysis?.user_sentiment === debouncedSentimentFilter
+      const matchesSentiment = debouncedSentimentFilter === 'all' || chat.chat_analysis?.user_sentiment?.toLowerCase() === debouncedSentimentFilter
 
-      return matchesStatus && matchesSentiment
+      return matchesSentiment
     })
 
     return fullyFilteredChats.length
-  }, [chats, debouncedSearchTerm, debouncedStatusFilter, debouncedSentimentFilter, isFuzzySearchEnabled])
+  }, [chats, debouncedSearchTerm, debouncedSentimentFilter, isFuzzySearchEnabled])
 
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearchTerm, debouncedStatusFilter, debouncedSentimentFilter])
+  }, [debouncedSearchTerm, debouncedSentimentFilter])
 
   // Remove displayChats - render filteredChats directly like CallsPage
 
@@ -2284,50 +2296,27 @@ export const SMSPage: React.FC<SMSPageProps> = ({ user }) => {
         <div>
             {/* Search and Filters */}
             <div className="mb-4 sm:mb-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-5 lg:p-6">
-              <div className="flex flex-col gap-3 sm:gap-4">
-                <div className="flex-1 relative">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                <div className="relative flex-1 max-w-md">
                   <SearchIcon className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
                   <input
                     type="search"
                     placeholder="Search chats by phone number, patient name, or content..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-12 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm sm:text-base touch-manipulation"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm sm:text-base touch-manipulation"
                   />
-                  <button
-                    onClick={() => setIsFuzzySearchEnabled(!isFuzzySearchEnabled)}
-                    className={`absolute right-3 top-1/2 transform -translate-y-1/2 p-1 rounded transition-colors ${
-                      isFuzzySearchEnabled
-                        ? 'text-blue-600 hover:text-blue-700 bg-blue-50 dark:bg-blue-900/20'
-                        : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-                    }`}
-                    title={isFuzzySearchEnabled ? 'Fuzzy search enabled - click to disable' : 'Basic search - click to enable fuzzy search'}
-                  >
-                    <ZapIcon className="w-4 h-4" />
-                  </button>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-3 sm:px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px] text-sm sm:text-base flex-1 sm:min-w-[120px] touch-manipulation"
-                  >
-                    <option value="all">All Status</option>
-                    <option value="ongoing">Ongoing</option>
-                    <option value="ended">Ended</option>
-                    <option value="error">Error</option>
-                  </select>
-                  <select
-                    value={sentimentFilter}
-                    onChange={(e) => setSentimentFilter(e.target.value)}
-                    className="px-3 sm:px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px] text-sm sm:text-base flex-1 sm:min-w-[130px] touch-manipulation"
-                  >
-                    <option value="all">All Sentiment</option>
-                    <option value="positive">Positive</option>
-                    <option value="neutral">Neutral</option>
-                    <option value="negative">Negative</option>
-                  </select>
-                </div>
+                <select
+                  value={sentimentFilter}
+                  onChange={(e) => setSentimentFilter(e.target.value)}
+                  className="px-3 sm:px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px] text-sm sm:text-base w-full sm:w-48 touch-manipulation"
+                >
+                  <option value="all">All Sentiment</option>
+                  <option value="positive">Positive</option>
+                  <option value="neutral">Neutral</option>
+                  <option value="negative">Negative</option>
+                </select>
               </div>
             </div>
 
@@ -2345,9 +2334,9 @@ export const SMSPage: React.FC<SMSPageProps> = ({ user }) => {
                     <div className="grid grid-cols-12 gap-2 lg:gap-4 text-xs sm:text-sm font-medium text-gray-700">
                       <div className="col-span-1">#</div>
                       <div className="col-span-3">Patient</div>
-                      <div className="col-span-3">Chat Info</div>
+                      <div className="col-span-3">Info and Sentiment</div>
                       <div className="col-span-2">Cost</div>
-                      <div className="col-span-2">Status & Duration</div>
+                      <div className="col-span-2">Status</div>
                       <div className="col-span-1">Actions</div>
                     </div>
                   </div>
@@ -2452,7 +2441,7 @@ export const SMSPage: React.FC<SMSPageProps> = ({ user }) => {
                               </div>
                               <div className="flex items-center gap-2 mt-1">
                                 {chat.chat_analysis?.user_sentiment && (
-                                  <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getSentimentColor(chat.chat_analysis.user_sentiment)}`}>
+                                  <span className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 ${getSentimentColor(chat.chat_analysis.user_sentiment)}`}>
                                     {chat.chat_analysis.user_sentiment}
                                   </span>
                                 )}
@@ -2569,7 +2558,7 @@ export const SMSPage: React.FC<SMSPageProps> = ({ user }) => {
                                 {chat.chat_status}
                               </span>
                               {chat.chat_analysis?.user_sentiment && (
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getSentimentColor(chat.chat_analysis.user_sentiment)}`}>
+                                <span className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 ${getSentimentColor(chat.chat_analysis.user_sentiment)}`}>
                                   {chat.chat_analysis.user_sentiment}
                                 </span>
                               )}

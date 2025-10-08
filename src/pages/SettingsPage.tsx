@@ -20,6 +20,7 @@ import {
   KeyIcon,
   LinkIcon
 } from 'lucide-react'
+import { TENANT_ID } from '@/config/tenantConfig'
 import FreshMfaService from '@/services/freshMfaService'
 import { FreshMfaSettings } from '@/components/settings/FreshMfaSettings'
 import { auditLogger } from '@/services/auditLogger'
@@ -102,6 +103,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
     { id: 'notifications', name: 'Notifications', icon: BellIcon },
     { id: 'audit', name: 'Audit Logs', icon: FileTextIcon },
     ...(user?.role === 'super_user' ? [
+      { id: 'api', name: 'API Configuration', icon: KeyIcon },
       { id: 'branding', name: 'Company Branding', icon: PaletteIcon },
     ] : [])
   ]
@@ -480,14 +482,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
       localStorage.setItem('currentUser', JSON.stringify(userData))
 
       // Update users list if exists
-      const storedUsers = localStorage.getItem('systemUsers')
+      const storedUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (storedUsers) {
         try {
           const users = JSON.parse(storedUsers)
           const updatedUsers = users.map((u: any) =>
             u.id === user.id ? { ...u, mfa_enabled: enabled } : u
           )
-          localStorage.setItem('systemUsers', JSON.stringify(updatedUsers))
+          localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(updatedUsers))
         } catch (error) {
           console.error('Failed to update users list:', error)
         }
@@ -795,7 +797,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
       }
 
       // Update systemUsers in localStorage
-      const systemUsers = localStorage.getItem('systemUsers')
+      const systemUsers = localStorage.getItem(`systemUsers_${TENANT_ID}`)
       if (systemUsers) {
         try {
           const users = JSON.parse(systemUsers)
@@ -803,7 +805,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
           if (userIndex >= 0) {
             users[userIndex].name = fullName.trim()
             users[userIndex].updated_at = new Date().toISOString()
-            localStorage.setItem('systemUsers', JSON.stringify(users))
+            localStorage.setItem(`systemUsers_${TENANT_ID}`, JSON.stringify(users))
             console.log('Updated systemUsers with new name')
           }
         } catch (parseError) {
@@ -1298,6 +1300,37 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
                   </div>
                 </div>
 
+              </div>
+            </div>
+          )}
+
+          {/* API Configuration - Super Users Only */}
+          {activeTab === 'api' && user?.role === 'super_user' && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                API Configuration
+              </h2>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Configure Retell AI API credentials and agent IDs. These settings are synchronized across all devices and sessions.
+              </p>
+
+              <ApiKeyErrorBoundary>
+                <EnhancedApiKeyManager
+                  user={user}
+                />
+              </ApiKeyErrorBoundary>
+
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-3 sm:p-4 rounded-lg mt-4">
+                <h4 className="text-sm sm:text-base font-medium text-blue-900 dark:text-blue-100 mb-2">
+                  About API Configuration
+                </h4>
+                <div className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 space-y-1">
+                  <p>• API credentials are encrypted and stored securely</p>
+                  <p>• Settings are synchronized across all your devices</p>
+                  <p>• Call Agent ID is used for voice call functionality</p>
+                  <p>• SMS Agent ID is used for text messaging functionality</p>
+                  <p>• Changes take effect immediately across all services</p>
+                </div>
               </div>
             </div>
           )}

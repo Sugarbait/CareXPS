@@ -91,9 +91,8 @@ export const CallsPage: React.FC<CallsPageProps> = ({ user }) => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
   const [sentimentFilter, setSentimentFilter] = useState('all')
-  const [isFuzzySearchEnabled, setIsFuzzySearchEnabled] = useState(true)
+  const [isFuzzySearchEnabled] = useState(false) // Regular search only
   const [selectedDateRange, setSelectedDateRange] = useState<DateRange>(() => {
     // Remember last selected date range from localStorage
     const saved = localStorage.getItem('calls_page_date_range')
@@ -327,7 +326,21 @@ export const CallsPage: React.FC<CallsPageProps> = ({ user }) => {
         throw error
       }
 
-      const totalCalls = allCallsResponse.calls
+      // CRITICAL: Filter by CareXPS Call agent ID ONLY - exclude Medex and other apps
+      const CAREXPS_CALL_AGENT_ID = 'agent_447a1b9da540237693b0440df6'
+      const agentFiltered = allCallsResponse.calls.filter(call => {
+        const isCarexpsCall = call.agent_id === CAREXPS_CALL_AGENT_ID
+
+        if (!isCarexpsCall) {
+          safeLog(`🚫 Excluding call ${call.call_id} from agent ${call.agent_id} (not CareXPS Call agent)`)
+        }
+
+        return isCarexpsCall
+      })
+
+      safeLog(`🔒 Agent filtering: ${allCallsResponse.calls.length} calls → ${agentFiltered.length} CareXPS calls (excluded ${allCallsResponse.calls.length - agentFiltered.length} from other agents)`)
+
+      const totalCalls = agentFiltered
       setTotalCallsCount(totalCalls.length)
 
       // Calculate pagination
@@ -369,7 +382,7 @@ export const CallsPage: React.FC<CallsPageProps> = ({ user }) => {
           call_length_seconds: durationSeconds,
           call_summary: retellCall.call_analysis?.call_summary || undefined,
           sentiment_analysis: retellCall.call_analysis?.user_sentiment ? {
-            overall_sentiment: retellCall.call_analysis.user_sentiment as 'positive' | 'negative' | 'neutral',
+            overall_sentiment: retellCall.call_analysis.user_sentiment.toLowerCase() as 'positive' | 'negative' | 'neutral',
             confidence_score: 0.8 // Default confidence score
           } : undefined,
           metadata: {
@@ -568,10 +581,10 @@ export const CallsPage: React.FC<CallsPageProps> = ({ user }) => {
 
   const getSentimentColor = (sentiment?: string) => {
     switch (sentiment) {
-      case 'positive': return 'text-green-600 bg-green-50 border-green-200'
-      case 'negative': return 'text-red-600 bg-red-50 border-red-200'
-      case 'neutral': return 'text-yellow-600 bg-yellow-50 border-yellow-200'
-      default: return 'text-gray-600 bg-gray-50 border-gray-200'
+      case 'positive': return 'text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700'
+      case 'negative': return 'text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700'
+      case 'neutral': return 'text-yellow-700 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700'
+      default: return 'text-gray-700 dark:text-gray-400 bg-gray-100 dark:bg-gray-800/30 border-gray-300 dark:border-gray-600'
     }
   }
 
@@ -897,14 +910,13 @@ export const CallsPage: React.FC<CallsPageProps> = ({ user }) => {
       }
     }
 
-    // Apply status and sentiment filters to search results
+    // Apply sentiment filter to search results
     return searchFilteredCalls.filter(call => {
-      const matchesStatus = statusFilter === 'all' || call.call_status === statusFilter
       const matchesSentiment = sentimentFilter === 'all' || call.sentiment_analysis?.overall_sentiment === sentimentFilter
 
-      return matchesStatus && matchesSentiment
+      return matchesSentiment
     })
-  }, [calls, searchTerm, statusFilter, sentimentFilter, isFuzzySearchEnabled])
+  }, [calls, searchTerm, sentimentFilter, isFuzzySearchEnabled])
 
   return (
     <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4 lg:space-y-6 min-h-screen">
@@ -1162,50 +1174,27 @@ export const CallsPage: React.FC<CallsPageProps> = ({ user }) => {
 
         {/* Search and Filters */}
         <div className="mb-4 sm:mb-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-5 lg:p-6">
-          <div className="flex flex-col gap-3 sm:gap-4">
-            <div className="flex-1 relative">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <div className="relative flex-1 max-w-md">
               <SearchIcon className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
               <input
                 type="search"
                 placeholder="Search calls by patient name, ID, or content..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-12 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm sm:text-base touch-manipulation"
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[44px] text-sm sm:text-base touch-manipulation"
               />
-              <button
-                onClick={() => setIsFuzzySearchEnabled(!isFuzzySearchEnabled)}
-                className={`absolute right-3 top-1/2 transform -translate-y-1/2 p-1 rounded transition-colors ${
-                  isFuzzySearchEnabled
-                    ? 'text-blue-600 hover:text-blue-700 bg-blue-50 dark:bg-blue-900/20'
-                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-                }`}
-                title={isFuzzySearchEnabled ? 'Fuzzy search enabled - click to disable' : 'Basic search - click to enable fuzzy search'}
-              >
-                <ZapIcon className="w-4 h-4" />
-              </button>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 sm:px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px] text-sm sm:text-base flex-1 sm:min-w-[120px] touch-manipulation"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="completed">Completed</option>
-                <option value="failed">Failed</option>
-              </select>
-              <select
-                value={sentimentFilter}
-                onChange={(e) => setSentimentFilter(e.target.value)}
-                className="px-3 sm:px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px] text-sm sm:text-base flex-1 sm:min-w-[130px] touch-manipulation"
-              >
-                <option value="all">All Sentiment</option>
-                <option value="positive">Positive</option>
-                <option value="neutral">Neutral</option>
-                <option value="negative">Negative</option>
-              </select>
-            </div>
+            <select
+              value={sentimentFilter}
+              onChange={(e) => setSentimentFilter(e.target.value)}
+              className="px-3 sm:px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px] text-sm sm:text-base w-full sm:w-48 touch-manipulation"
+            >
+              <option value="all">All Sentiment</option>
+              <option value="positive">Positive</option>
+              <option value="neutral">Neutral</option>
+              <option value="negative">Negative</option>
+            </select>
           </div>
         </div>
 
@@ -1225,7 +1214,7 @@ export const CallsPage: React.FC<CallsPageProps> = ({ user }) => {
                   <div className="col-span-3">Patient</div>
                   <div className="col-span-2">Date & Time</div>
                   <div className="col-span-2">Duration</div>
-                  <div className="col-span-2">Status</div>
+                  <div className="col-span-2">Sentiment</div>
                   <div className="col-span-2">Cost</div>
                 </div>
               </div>
@@ -1300,9 +1289,6 @@ export const CallsPage: React.FC<CallsPageProps> = ({ user }) => {
                       {/* Status */}
                       <div className="col-span-2">
                         <div className="flex items-center gap-2">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(call.call_status)}`}>
-                            {call.call_status}
-                          </span>
                           {call.sentiment_analysis && (
                             <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getSentimentColor(call.sentiment_analysis.overall_sentiment)}`}>
                               {call.sentiment_analysis.overall_sentiment}
@@ -1347,9 +1333,6 @@ export const CallsPage: React.FC<CallsPageProps> = ({ user }) => {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(call.call_status)}`}>
-                          {call.call_status}
-                        </span>
                         <span className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
                           <ClockIcon className="w-3 h-3" />
                           {formatDuration(call.call_length_seconds)}

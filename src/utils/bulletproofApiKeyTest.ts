@@ -241,7 +241,9 @@ if (typeof window !== 'undefined') {
   ;(window as any).bulletproofApiKeyTest = bulletproofApiKeyTest
 }
 
-// Auto-run test in development mode after a delay
+// Auto-run test in development mode DISABLED - was causing 404 errors by overwriting real credentials
+// To manually run tests, use: window.bulletproofApiKeyTest.runAllTests()
+/*
 if (import.meta.env.DEV) {
   setTimeout(async () => {
     console.log('🔧 Development mode: Running bulletproof API key test...')
@@ -254,3 +256,4 @@ if (import.meta.env.DEV) {
     console.log('\n💡 To manually run tests, use: window.bulletproofApiKeyTest.runAllTests()')
   }, 3000) // Wait 3 seconds after app initialization
 }
+*/
