@@ -22,6 +22,7 @@ interface MandatoryMfaLoginProps {
   }
   onMfaVerified: () => void
   onMfaCancel: () => void
+  forcedBySecurityCheck?: boolean  // Indicates if MFA is forced by App.tsx security override
 }
 
 interface MfaCheckState {
@@ -33,7 +34,8 @@ interface MfaCheckState {
 export const MandatoryMfaLogin: React.FC<MandatoryMfaLoginProps> = ({
   user,
   onMfaVerified,
-  onMfaCancel
+  onMfaCancel,
+  forcedBySecurityCheck = false
 }) => {
   const [mfaCheckState, setMfaCheckState] = useState<MfaCheckState>({
     isLoading: true,
@@ -111,10 +113,21 @@ export const MandatoryMfaLogin: React.FC<MandatoryMfaLoginProps> = ({
         })
       )
 
-      // If MFA is not required, immediately complete authentication
+      // 🔒 SECURITY: Determine if this is a bypass attempt or normal login
+      // If forcedBySecurityCheck is true, App.tsx detected a potential bypass attack
       if (!mfaEnabled) {
-        console.log('✅ MFA not required for user - completing authentication')
-        onMfaVerified()
+        if (forcedBySecurityCheck) {
+          // App.tsx forced MFA for security, but database says MFA disabled
+          // This indicates a bypass attempt - force logout
+          console.log('🔒 SECURITY: Bypass attempt detected - forcing logout')
+          console.log('  - forcedBySecurityCheck:', forcedBySecurityCheck)
+          console.log('  - mfaEnabled from database:', mfaEnabled)
+          onMfaCancel()
+        } else {
+          // Normal flow: MFA not required and not forced by security check
+          console.log('✅ MFA not required for user - completing authentication')
+          onMfaVerified()
+        }
       }
 
     } catch (error) {

@@ -239,18 +239,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           try {
             mfaEnabled = await FreshMfaService.isMfaEnabled(userProfile.id)
 
-            // Check for existing valid MFA session (5 minute window after successful MFA)
+            // SECURITY FIX: Check if MFA was completed in this browser session
+            const mfaCompletedThisSession = sessionStorage.getItem('mfaCompletedThisSession')
             const mfaTimestamp = localStorage.getItem('freshMfaVerified')
-            if (mfaTimestamp) {
+
+            // Only allow MFA session reuse if completed in this session
+            if (mfaCompletedThisSession === 'true' && mfaTimestamp) {
               const sessionAge = Date.now() - parseInt(mfaTimestamp)
               const MAX_MFA_SESSION_AGE = 5 * 60 * 1000 // 5 minutes - short window for immediate re-auth scenarios
               hasValidMFASession = sessionAge < MAX_MFA_SESSION_AGE
+            } else {
+              hasValidMFASession = false
             }
 
-            console.log('🔐 MFA Status Check:', {
+            console.log('🔐 MFA Status Check (AuthContext):', {
               userId: userProfile.id,
               mfaEnabled,
               hasValidMFASession,
+              mfaCompletedThisSession: mfaCompletedThisSession === 'true',
               requiresVerification: mfaEnabled && !hasValidMFASession
             })
 
@@ -827,6 +833,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         userProfile.mfaVerified = true
         const mfaTimestamp = Date.now().toString()
         localStorage.setItem('freshMfaVerified', mfaTimestamp)
+
+        // SECURITY FIX: Mark that MFA was completed in this browser session
+        sessionStorage.setItem('mfaCompletedThisSession', 'true')
+        console.log('🔐 SECURITY: Set mfaCompletedThisSession flag after successful MFA (AuthContext)')
 
         setUserSafely(userProfile)
 

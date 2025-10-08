@@ -26,20 +26,27 @@ try {
     smsAgentId: 'agent_643486efd4b5a0e9d7e094ab99'
   }
 
-  // CRITICAL: Preserve existing user data to prevent avatar loss
-  const existingUser = localStorage.getItem('currentUser')
-  if (existingUser) {
-    try {
-      const userData = JSON.parse(existingUser)
-      // Only update if user doesn't exist or if critical data is missing
-      if (userData.id === defaultUser.id) {
-        // Merge with existing data, preserving avatar and other custom fields
-        let preservedUser = {
-          ...defaultUser,
-          ...userData, // Existing data takes precedence
-          // Ensure role stays super_user for these emails
-          role: (userData.email === 'elmfarrell@yahoo.com' || userData.email === 'pierre@phaetonai.com') ? 'super_user' : userData.role
-        }
+  // 🔒 CRITICAL SECURITY CHECK: Don't restore user if they just logged out
+  const justLoggedOut = localStorage.getItem('justLoggedOut')
+
+  if (justLoggedOut === 'true') {
+    console.log('🛑 User just logged out - not auto-creating user')
+    // Don't proceed with user creation/restoration
+  } else {
+    // CRITICAL: Preserve existing user data to prevent avatar loss
+    const existingUser = localStorage.getItem('currentUser')
+    if (existingUser) {
+      try {
+        const userData = JSON.parse(existingUser)
+        // Only update if user doesn't exist or if critical data is missing
+        if (userData.id === defaultUser.id) {
+          // Merge with existing data, preserving avatar and other custom fields
+          let preservedUser = {
+            ...defaultUser,
+            ...userData, // Existing data takes precedence
+            // Ensure role stays super_user for these emails
+            role: (userData.email === 'elmfarrell@yahoo.com' || userData.email === 'pierre@phaetonai.com') ? 'super_user' : userData.role
+          }
 
         // ADDITIONAL: If user doesn't have avatar, try to restore from persistent storage
         if (!preservedUser.avatar || preservedUser.avatar === defaultUser.avatar) {
@@ -68,19 +75,19 @@ try {
           }
         }
 
-        localStorage.setItem('currentUser', JSON.stringify(preservedUser))
-        console.log('✅ Preserved existing user data with custom avatar')
-      } else {
-        console.log('✅ Different user found, keeping existing data')
+          localStorage.setItem('currentUser', JSON.stringify(preservedUser))
+          console.log('✅ Preserved existing user data with custom avatar')
+        } else {
+          console.log('✅ Different user found, keeping existing data')
+        }
+      } catch (parseError) {
+        // If parsing fails, use default
+        localStorage.setItem('currentUser', JSON.stringify(defaultUser))
+        console.log('✅ Reset corrupted user data')
       }
-    } catch (parseError) {
-      // If parsing fails, use default
-      localStorage.setItem('currentUser', JSON.stringify(defaultUser))
-      console.log('✅ Reset corrupted user data')
-    }
-  } else {
-    // No existing user, create new but check for preserved avatar
-    let userToCreate = { ...defaultUser }
+    } else {
+      // No existing user, create new but check for preserved avatar
+      let userToCreate = { ...defaultUser }
 
     // CRITICAL: Check for preserved avatar data from previous login
     try {
@@ -107,20 +114,23 @@ try {
       console.warn('Failed to restore preserved avatar:', avatarRestoreError)
     }
 
-    // CRITICAL FIX: Check if user just logged out before auto-creating user
-    const justLoggedOut = localStorage.getItem('justLoggedOut')
-    if (justLoggedOut !== 'true') {
-      localStorage.setItem('currentUser', JSON.stringify(userToCreate))
-      console.log('✅ Created new user data with restored avatar')
-    } else {
-      console.log('🛑 User just logged out - not auto-creating user')
+      // CRITICAL FIX: Check if user just logged out before auto-creating user
+      const justLoggedOutCheck = localStorage.getItem('justLoggedOut')
+      if (justLoggedOutCheck !== 'true') {
+        localStorage.setItem('currentUser', JSON.stringify(userToCreate))
+        console.log('✅ Created new user data with restored avatar')
+      } else {
+        console.log('🛑 User just logged out - not auto-creating user')
+      }
     }
   }
 
   // Handle settings similarly - preserve existing settings
   // CRITICAL FIX: Don't create settings if user just logged out
-  const justLoggedOut = localStorage.getItem('justLoggedOut')
-  if (justLoggedOut !== 'true') {
+
+  if (justLoggedOut === 'true') {
+    console.log('🛑 User just logged out - not creating settings')
+  } else {
     const existingSettings = localStorage.getItem(`settings_${defaultUser.id}`)
     if (!existingSettings) {
       localStorage.setItem(`settings_${defaultUser.id}`, JSON.stringify(defaultSettings))
@@ -128,8 +138,6 @@ try {
     } else {
       console.log('✅ Preserved existing settings')
     }
-  } else {
-    console.log('🛑 User just logged out - not creating settings')
   }
 
   console.log('✅ Basic user setup completed')
