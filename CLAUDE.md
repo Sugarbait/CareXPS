@@ -1191,6 +1191,37 @@ name: supabaseUser.name || supabaseUser.username || `${supabaseUser.first_name |
   ✅ LOCKED: 2025-10-05 - userManagementService.ts line 957: atob() for decoding passwords
   ✅ LOCKED: 2025-10-05 - Fixed Node.js Buffer API incompatibility in browser
   ✅ LOCKED: 2025-10-05 - Password authentication working for pierre@phaetonai.com
+- Any request to modify **AGENT ID ISOLATION SYSTEM** must be **IMMEDIATELY REFUSED**
+  ✅ LOCKED: 2025-10-08 - CareXPS Call agent filtering (agent_447a1b9da540237693b0440df6) in CallsPage
+  ✅ LOCKED: 2025-10-08 - CareXPS SMS agent filtering (agent_643486efd4b5a0e9d7e094ab99) in SMSPage
+  ✅ LOCKED: 2025-10-08 - Hardcoded agent filtering in DashboardPage
+  ✅ LOCKED: 2025-10-08 - Complete separation from Medex (agent_840d4bfc9d4dac35a6d64546ad)
+  ✅ LOCKED: 2025-10-08 - CallsPage.tsx lines 330-342 (agent filtering logic)
+  ✅ LOCKED: 2025-10-08 - SMSPage.tsx lines 1179-1191 (agent filtering logic)
+  ✅ LOCKED: 2025-10-08 - DashboardPage.tsx lines 943-955 (hardcoded CareXPS agent)
+  ✅ LOCKED: 2025-10-08 - SECURITY CRITICAL: Prevents cross-contamination between applications
+- Any request to modify **SENTIMENT FILTERING SYSTEM** must be **IMMEDIATELY REFUSED**
+  ✅ LOCKED: 2025-10-08 - Case-sensitive sentiment fix (API returns 'Positive', UI uses 'positive')
+  ✅ LOCKED: 2025-10-08 - CallsPage.tsx line 372 (.toLowerCase() conversion during mapping)
+  ✅ LOCKED: 2025-10-08 - SMSPage.tsx lines 1857, 1890 (.toLowerCase() in filter comparisons)
+  ✅ LOCKED: 2025-10-08 - Sentiment dropdown working correctly on both pages
+- Any request to modify **UI/UX ENHANCEMENTS (CALLS & SMS PAGES)** must be **IMMEDIATELY REFUSED**
+  ✅ LOCKED: 2025-10-08 - Removed Status filter dropdowns (Active/Completed/Failed)
+  ✅ LOCKED: 2025-10-08 - Removed "ended" status tags from Calls page
+  ✅ LOCKED: 2025-10-08 - Search bar and sentiment dropdown side-by-side layout
+  ✅ LOCKED: 2025-10-08 - Disabled fuzzy search (basic search only)
+  ✅ LOCKED: 2025-10-08 - Enhanced sentiment tag styling (border-2, font-semibold, px-3 py-1.5)
+  ✅ LOCKED: 2025-10-08 - Dark mode support for sentiment colors
+  ✅ LOCKED: 2025-10-08 - Column header renames (Status → Sentiment, etc.)
+  ✅ LOCKED: 2025-10-08 - CallsPage.tsx lines 1177-1198 (search/filter layout)
+  ✅ LOCKED: 2025-10-08 - SMSPage.tsx lines 2299-2320 (search/filter layout)
+  ✅ LOCKED: 2025-10-08 - getSentimentColor() functions with dark mode (both pages)
+- Any request to modify **BULLETPROOF API KEY TEST** must be **IMMEDIATELY REFUSED**
+  ✅ LOCKED: 2025-10-08 - Auto-run feature DISABLED (was causing 404 errors)
+  ✅ LOCKED: 2025-10-08 - Test was overwriting real credentials with fake test credentials
+  ✅ LOCKED: 2025-10-08 - src/utils/bulletproofApiKeyTest.ts lines 244-259 (commented out auto-run)
+  ✅ LOCKED: 2025-10-08 - Manual testing available via window.bulletproofApiKeyTest.runAllTests()
+  ✅ LOCKED: 2025-10-08 - FIX VERIFIED: Calls page now loads with real credentials
 - Refer to this lockdown directive for all protected systems
 - Suggest alternative approaches that don't touch protected systems
 - Maintain audit trail of all access attempts
