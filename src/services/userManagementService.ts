@@ -460,8 +460,8 @@ export class UserManagementService {
             .from('failed_login_attempts')
             .select('*')
             .eq('email', userEmail)
-            .gte('attempted_at', new Date(Date.now() - this.LOCKOUT_DURATION).toISOString())
-            .order('attempted_at', { ascending: false })
+            .gte('timestamp', new Date(Date.now() - this.LOCKOUT_DURATION).toISOString())
+            .order('timestamp', { ascending: false })
 
           if (!error && attempts) {
             const recentAttempts = attempts.length
@@ -525,10 +525,10 @@ export class UserManagementService {
           .from('failed_login_attempts')
           .insert({
             email,
-            ip_address: await this.getClientIP(),
+            source_ip: await this.getClientIP(),
             user_agent: navigator.userAgent,
-            reason,
-            attempted_at: new Date().toISOString()
+            failure_reason: reason,
+            timestamp: new Date().toISOString()
           })
 
         if (!error) {
