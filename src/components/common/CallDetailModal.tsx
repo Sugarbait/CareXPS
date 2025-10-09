@@ -33,6 +33,12 @@ interface CallDetailModalProps {
       overall_sentiment: 'positive' | 'negative' | 'neutral'
       confidence_score: number
     }
+    call_analysis?: {
+      call_summary?: string
+      user_sentiment?: 'positive' | 'negative' | 'neutral'
+      call_successful?: boolean
+      custom_analysis_data?: any
+    }
     metadata?: {
       patient_name?: string
       call_type?: string
@@ -223,6 +229,25 @@ export const CallDetailModal: React.FC<CallDetailModalProps> = ({ call, isOpen, 
               <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">Call Summary</h3>
                 <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{call.call_summary}</p>
+              </div>
+            )}
+
+            {/* Detailed Analysis - Custom Analysis Data */}
+            {call.call_analysis?.custom_analysis_data && Object.keys(call.call_analysis.custom_analysis_data).length > 0 && (
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                <h4 className="text-md font-semibold text-gray-900 dark:text-gray-100 mb-3">Detailed Analysis</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {Object.entries(call.call_analysis.custom_analysis_data).map(([key, value]) => (
+                    <div key={key} className="border-l-4 border-blue-500 pl-3">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">
+                        {key.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim()}
+                      </label>
+                      <p className="text-gray-900 dark:text-gray-100 text-sm mt-1">
+                        {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
