@@ -154,9 +154,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   React.useEffect(() => {
     const createUsersIfNeeded = async () => {
       try {
-        // First, clean up any existing duplicate Guest users
-        console.log('Cleaning up duplicate system users...')
-        await cleanupDuplicateGuests()
+        // DISABLED: This cleanup was too aggressive and removed user-created accounts with "guest" in the name
+        // Only run this manually if needed to clean up actual duplicate system guest users
+        // console.log('Cleaning up duplicate system users...')
+        // await cleanupDuplicateGuests()
 
         // Then proceed with normal user checking/creation
         // Check if system user has been explicitly deleted
