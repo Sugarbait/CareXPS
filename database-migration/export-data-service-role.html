@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CareXPS Database Export Tool (Service Role)</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 900px;
+      margin: 50px auto;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+
+    .container {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      padding: 40px;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+    }
+
+    .config-section {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border-left: 4px solid #667eea;
+    }
+
+    .config-section h3 {
+      margin-top: 0;
+      color: #667eea;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-family: monospace;
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      border-radius: 5px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 10px;
+      transition: transform 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    #status {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 5px;
+      display: none;
+    }
+
+    #status.info {
+      background: #e3f2fd;
+      border-left: 4px solid #2196f3;
+      color: #1976d2;
+      display: block;
+    }
+
+    #status.success {
+      background: #e8f5e9;
+      border-left: 4px solid #4caf50;
+      color: #2e7d32;
+      display: block;
+    }
+
+    #status.error {
+      background: #ffebee;
+      border-left: 4px solid #f44336;
+      color: #c62828;
+      display: block;
+    }
+
+    #progress {
+      margin-top: 20px;
+      display: none;
+    }
+
+    .progress-item {
+      padding: 10px;
+      background: #f8f9fa;
+      margin-bottom: 5px;
+      border-radius: 5px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .progress-item.success {
+      background: #e8f5e9;
+    }
+
+    .progress-item.error {
+      background: #ffebee;
+    }
+
+    .note {
+      background: #fff3e0;
+      border-left: 4px solid #ff9800;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 5px;
+    }
+
+    .note strong {
+      color: #e65100;
+    }
+
+    .service-role-note {
+      background: #e8f5e9;
+      border-left: 4px solid #4caf50;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 5px;
+    }
+
+    .service-role-note strong {
+      color: #2e7d32;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🗄️ CareXPS Database Export Tool (Admin)</h1>
+    <p class="subtitle">Export ALL data using Service Role Key (bypasses RLS)</p>
+
+    <div class="service-role-note">
+      <strong>✅ Admin Export:</strong> This version uses the Service Role Key to bypass Row Level Security and export ALL data, including users, settings, and profiles.
+    </div>
+
+    <div class="config-section">
+      <h3>Current Database Configuration</h3>
+      <label>Supabase URL:</label>
+      <input type="text" id="supabaseUrl" value="https://cpkslvmydfdevdftieck.supabase.co" placeholder="Current Supabase URL">
+
+      <label>Service Role Key:</label>
+      <input type="text" id="supabaseServiceKey" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwa3Nsdm15ZGZkZXZkZnRpZWNrIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NjkwMDI5NSwiZXhwIjoyMDYyNDc2Mjk1fQ.5Nwr-DrgL63DwPMH2egxgdjoHGhAxCvIrz2SMTMKqD0" placeholder="Service Role Key">
+    </div>
+
+    <button id="exportBtn" onclick="exportData()">🚀 Start Admin Export</button>
+
+    <div id="status"></div>
+
+    <div id="progress"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    let supabaseClient;
+
+    function showStatus(message, type) {
+      const statusDiv = document.getElementById('status');
+      statusDiv.textContent = message;
+      statusDiv.className = type;
+    }
+
+    function addProgress(table, count, isError = false) {
+      const progressDiv = document.getElementById('progress');
+      progressDiv.style.display = 'block';
+
+      const item = document.createElement('div');
+      item.className = `progress-item ${isError ? 'error' : 'success'}`;
+      item.innerHTML = `
+        <span>${table}</span>
+        <span>${count} ${isError ? 'ERROR' : 'records'}</span>
+      `;
+      progressDiv.appendChild(item);
+    }
+
+    async function exportData() {
+      const exportBtn = document.getElementById('exportBtn');
+      exportBtn.disabled = true;
+
+      // Clear previous progress
+      document.getElementById('progress').innerHTML = '';
+
+      try {
+        // Initialize Supabase client with SERVICE ROLE KEY
+        const url = document.getElementById('supabaseUrl').value;
+        const serviceKey = document.getElementById('supabaseServiceKey').value;
+
+        if (!url || !serviceKey) {
+          showStatus('❌ Please enter Supabase URL and Service Role Key', 'error');
+          exportBtn.disabled = false;
+          return;
+        }
+
+        showStatus('⏳ Connecting to database with admin privileges...', 'info');
+
+        supabaseClient = supabase.createClient(url, serviceKey, {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false
+          }
+        });
+
+        // Export data
+        const exportData = {
+          exportedAt: new Date().toISOString(),
+          databaseUrl: url,
+          exportedBy: 'CareXPS Export Tool (Service Role)',
+          version: '1.0'
+        };
+
+        showStatus('⏳ Exporting users...', 'info');
+        try {
+          const { data: users, error: usersError } = await supabaseClient
+            .from('users')
+            .select('*');
+
+          if (usersError) throw usersError;
+          exportData.users = users || [];
+          addProgress('users', users?.length || 0);
+        } catch (err) {
+          console.error('Users export error:', err);
+          addProgress('users', err.message, true);
+          exportData.users = [];
+        }
+
+        showStatus('⏳ Exporting user settings...', 'info');
+        try {
+          const { data: settings, error: settingsError } = await supabaseClient
+            .from('user_settings')
+            .select('*');
+
+          if (settingsError) throw settingsError;
+          exportData.settings = settings || [];
+          addProgress('user_settings', settings?.length || 0);
+        } catch (err) {
+          console.error('Settings export error:', err);
+          addProgress('user_settings', err.message, true);
+          exportData.settings = [];
+        }
+
+        showStatus('⏳ Exporting user profiles...', 'info');
+        try {
+          const { data: profiles, error: profilesError } = await supabaseClient
+            .from('user_profiles')
+            .select('*');
+
+          if (profilesError) throw profilesError;
+          exportData.profiles = profiles || [];
+          addProgress('user_profiles', profiles?.length || 0);
+        } catch (err) {
+          console.error('Profiles export error:', err);
+          addProgress('user_profiles', err.message, true);
+          exportData.profiles = [];
+        }
+
+        showStatus('⏳ Exporting MFA configs...', 'info');
+        try {
+          const { data: mfaConfigs, error: mfaError } = await supabaseClient
+            .from('user_mfa_configs')
+            .select('*');
+
+          if (mfaError) throw mfaError;
+          exportData.mfaConfigs = mfaConfigs || [];
+          addProgress('user_mfa_configs', mfaConfigs?.length || 0);
+        } catch (err) {
+          console.error('MFA configs export error:', err);
+          addProgress('user_mfa_configs', err.message, true);
+          exportData.mfaConfigs = [];
+        }
+
+        showStatus('⏳ Exporting MFA challenges...', 'info');
+        try {
+          const { data: challenges, error: challengesError } = await supabaseClient
+            .from('mfa_challenges')
+            .select('*');
+
+          if (challengesError) throw challengesError;
+          exportData.mfaChallenges = challenges || [];
+          addProgress('mfa_challenges', challenges?.length || 0);
+        } catch (err) {
+          console.error('MFA challenges export error:', err);
+          addProgress('mfa_challenges', err.message, true);
+          exportData.mfaChallenges = [];
+        }
+
+        showStatus('⏳ Exporting audit logs...', 'info');
+        try {
+          const { data: auditLogs, error: logsError } = await supabaseClient
+            .from('audit_logs')
+            .select('*')
+            .order('timestamp', { ascending: false })
+            .limit(10000);
+
+          if (logsError) throw logsError;
+          exportData.auditLogs = auditLogs || [];
+          addProgress('audit_logs', auditLogs?.length || 0);
+        } catch (err) {
+          console.error('Audit logs export error:', err);
+          addProgress('audit_logs', err.message, true);
+          exportData.auditLogs = [];
+        }
+
+        showStatus('⏳ Exporting failed login attempts...', 'info');
+        try {
+          const { data: failedLogins, error: failedError } = await supabaseClient
+            .from('failed_login_attempts')
+            .select('*')
+            .order('timestamp', { ascending: false })
+            .limit(5000);
+
+          if (failedError) throw failedError;
+          exportData.failedLogins = failedLogins || [];
+          addProgress('failed_login_attempts', failedLogins?.length || 0);
+        } catch (err) {
+          console.error('Failed logins export error:', err);
+          addProgress('failed_login_attempts', err.message, true);
+          exportData.failedLogins = [];
+        }
+
+        showStatus('⏳ Exporting notes...', 'info');
+        try {
+          const { data: notes, error: notesError } = await supabaseClient
+            .from('notes')
+            .select('*');
+
+          if (notesError) throw notesError;
+          exportData.notes = notes || [];
+          addProgress('notes', notes?.length || 0);
+        } catch (err) {
+          console.error('Notes export error:', err);
+          addProgress('notes', err.message, true);
+          exportData.notes = [];
+        }
+
+        showStatus('⏳ Exporting system credentials...', 'info');
+        try {
+          const { data: credentials, error: credentialsError } = await supabaseClient
+            .from('system_credentials')
+            .select('*');
+
+          if (credentialsError) throw credentialsError;
+          exportData.credentials = credentials || [];
+          addProgress('system_credentials', credentials?.length || 0);
+        } catch (err) {
+          console.error('Credentials export error:', err);
+          addProgress('system_credentials', err.message, true);
+          exportData.credentials = [];
+        }
+
+        // Download JSON file
+        showStatus('⏳ Generating download...', 'info');
+
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+          type: 'application/json'
+        });
+
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `carexps-data-export-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(downloadUrl);
+
+        showStatus('✅ Export completed! File downloaded.', 'success');
+
+        // Calculate total records
+        const totalRecords = (exportData.users?.length || 0) +
+                            (exportData.settings?.length || 0) +
+                            (exportData.profiles?.length || 0) +
+                            (exportData.mfaConfigs?.length || 0) +
+                            (exportData.mfaChallenges?.length || 0) +
+                            (exportData.auditLogs?.length || 0) +
+                            (exportData.failedLogins?.length || 0) +
+                            (exportData.notes?.length || 0) +
+                            (exportData.credentials?.length || 0);
+
+        console.log(`✅ Export complete: ${totalRecords} total records exported`);
+        console.log(`📊 Users: ${exportData.users?.length || 0}`);
+        console.log(`📊 Settings: ${exportData.settings?.length || 0}`);
+        console.log(`📊 Profiles: ${exportData.profiles?.length || 0}`);
+
+      } catch (error) {
+        console.error('Export error:', error);
+        showStatus(`❌ Export failed: ${error.message}`, 'error');
+      } finally {
+        exportBtn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
