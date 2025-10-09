@@ -56,8 +56,8 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
 
   const getDefaultConfig = (): EmailNotificationConfig => ({
     enabled: false,
-    recipientEmails: [],
-    notificationTypes: {
+    recipients: [],
+    types: {
       newSMS: true,
       newCall: true,
       securityAlerts: true,
@@ -93,14 +93,17 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
       return
     }
 
-    if (config.recipientEmails.includes(newEmail)) {
+    const recipientList = config.recipients || config.recipientEmails || []
+
+    if (recipientList.includes(newEmail)) {
       setMessage({ type: 'error', text: 'Email address already added' })
       return
     }
 
     setConfig({
       ...config,
-      recipientEmails: [...config.recipientEmails, newEmail]
+      recipients: [...recipientList, newEmail],
+      recipientEmails: [...recipientList, newEmail] // Keep both for compatibility
     })
     setNewEmail('')
     setMessage({ type: 'success', text: 'Email address added' })
@@ -109,9 +112,13 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
   const handleRemoveEmail = async (emailToRemove: string) => {
     if (!config) return
 
+    const recipientList = config.recipients || config.recipientEmails || []
+    const updatedList = recipientList.filter(email => email !== emailToRemove)
+
     const updatedConfig = {
       ...config,
-      recipientEmails: config.recipientEmails.filter(email => email !== emailToRemove)
+      recipients: updatedList,
+      recipientEmails: updatedList // Keep both for compatibility
     }
 
     setConfig(updatedConfig)
@@ -126,7 +133,8 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
   }
 
   const handleTestEmail = async () => {
-    if (!config || config.recipientEmails.length === 0) {
+    const recipientList = config?.recipients || config?.recipientEmails || []
+    if (!config || recipientList.length === 0) {
       setMessage({ type: 'error', text: 'Please add at least one email address first' })
       return
     }
@@ -166,7 +174,7 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
               id: 'test-email',
               created_at: new Date().toISOString()
             },
-            recipients: config.recipientEmails
+            recipients: recipientList
           }),
           signal: controller.signal
         })
@@ -182,7 +190,7 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
         console.log('📧 Supabase Edge Function result:', result)
 
         if (result.success) {
-          const successCount = result.results?.filter((r: any) => r.success).length || config.recipientEmails.length
+          const successCount = result.results?.filter((r: any) => r.success).length || recipientList.length
           setMessage({ type: 'success', text: `Test email sent successfully to ${successCount} recipient(s)! Check your inbox.` })
         } else {
           setMessage({ type: 'error', text: `Email failed: ${result.results?.[0]?.error || 'Unknown error'}` })
@@ -205,41 +213,26 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
     }
   }
 
-  const handleToggleNotificationType = (type: keyof EmailNotificationConfig['notificationTypes']) => {
+  const handleToggleNotificationType = (type: string) => {
     if (!config) return
+
+    const notifTypes = config.types || config.notificationTypes || {}
 
     setConfig({
       ...config,
-      notificationTypes: {
-        ...config.notificationTypes,
-        [type]: !config.notificationTypes[type]
+      types: {
+        ...notifTypes,
+        [type]: !notifTypes[type]
+      },
+      notificationTypes: { // Keep both for compatibility
+        ...notifTypes,
+        [type]: !notifTypes[type]
       }
     })
   }
 
-  // Show access denied for non-super users
-  if (!isSuperUser) {
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <Shield className="w-6 h-6 text-red-500" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Email Notification Settings
-          </h3>
-        </div>
-
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
-            <p className="text-red-800 dark:text-red-200 font-medium">Access Restricted</p>
-          </div>
-          <p className="text-red-700 dark:text-red-300 mt-2">
-            Email notification settings can only be configured by Super Users for security purposes.
-          </p>
-        </div>
-      </div>
-    )
-  }
+  // Show access info for non-super users (but still show the UI)
+  const isRestricted = !isSuperUser
 
   if (isLoading) {
     return (
@@ -267,6 +260,23 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
         </div>
       </div>
 
+      {/* Access Restriction Warning for non-super users */}
+      {isRestricted && (
+        <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+          <div className="flex items-start gap-2">
+            <Shield className="w-5 h-5 text-amber-600 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                View-Only Mode
+              </p>
+              <p className="text-sm text-amber-800 dark:text-amber-200 mt-1">
+                You can view email notification settings, but only Super Users can modify them for security purposes.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Message Display */}
       {message && (
         <div className={`mb-6 p-4 rounded-lg border ${
@@ -286,7 +296,8 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
               type="checkbox"
               checked={config?.enabled || false}
               onChange={(e) => config && setConfig({ ...config, enabled: e.target.checked })}
-              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+              disabled={isRestricted}
+              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
               Enable Email Notifications
@@ -314,13 +325,15 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
             { key: 'newCall' as const, label: 'New Voice Calls', icon: Phone },
             { key: 'securityAlerts' as const, label: 'Security Alerts', icon: ShieldCheck },
             { key: 'systemAlerts' as const, label: 'System Alerts', icon: AlertTriangle }
-          ].map(({ key, label, icon: IconComponent }) => (
+          ].map(({ key, label, icon: IconComponent }) => {
+            const notifTypes = config?.types || config?.notificationTypes || {}
+            return (
             <label key={key} className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
-                checked={config?.notificationTypes[key] || false}
+                checked={notifTypes[key] || false}
                 onChange={() => handleToggleNotificationType(key)}
-                disabled={!config?.enabled}
+                disabled={!config?.enabled || isRestricted}
                 className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
               />
               <span className="flex items-center gap-2">
@@ -337,7 +350,8 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
                 </span>
               </span>
             </label>
-          ))}
+          )
+          })}
         </div>
       </div>
 
@@ -355,12 +369,12 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
             onChange={(e) => setNewEmail(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleAddEmail()}
             placeholder="Enter email address"
-            disabled={!config?.enabled}
+            disabled={!config?.enabled || isRestricted}
             className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
           />
           <button
             onClick={handleAddEmail}
-            disabled={!config?.enabled || !newEmail.trim()}
+            disabled={!config?.enabled || !newEmail.trim() || isRestricted}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
@@ -369,14 +383,14 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
         </div>
 
         {/* Email List */}
-        {config && config.recipientEmails.length > 0 ? (
+        {config && (config.recipients || config.recipientEmails || []).length > 0 ? (
           <div className="space-y-2">
-            {config.recipientEmails.map((email, index) => (
+            {(config.recipients || config.recipientEmails || []).map((email, index) => (
               <div key={index} className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
                 <span className="text-sm text-gray-900 dark:text-gray-100">{email}</span>
                 <button
                   onClick={() => handleRemoveEmail(email)}
-                  disabled={!config.enabled}
+                  disabled={!config.enabled || isRestricted}
                   className="text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Remove email"
                 >
@@ -396,7 +410,7 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
       <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
         <button
           onClick={handleSaveSettings}
-          disabled={isSaving || !config}
+          disabled={isSaving || !config || isRestricted}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {isSaving ? (
@@ -404,12 +418,12 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
           ) : (
             <Mail className="w-4 h-4" />
           )}
-          {isSaving ? 'Saving...' : 'Save Settings'}
+          {isSaving ? 'Saving...' : isRestricted ? 'Super User Only' : 'Save Settings'}
         </button>
 
         <button
           onClick={handleTestEmail}
-          disabled={isTesting || !config?.enabled || config.recipientEmails.length === 0}
+          disabled={isTesting || !config?.enabled || (config?.recipients || config?.recipientEmails || []).length === 0 || isRestricted}
           className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {isTesting ? (
