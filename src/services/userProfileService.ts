@@ -444,11 +444,7 @@ export class UserProfileService {
               avatar_url: userProfileData.avatar,
               azure_ad_id: `placeholder_${userProfileData.id}_${Date.now()}`, // Required by schema
               updated_at: currentTime,
-              is_active: true,
-              metadata: {
-                original_role: userProfileData.role,
-                updated_via: 'profile_service'
-              }
+              is_active: true
             }, { onConflict: 'id' })
 
           if (error) {
@@ -1018,12 +1014,7 @@ export class UserProfileService {
           azure_ad_id: azureAdId, // Required by schema
           mfa_enabled: userData.mfa_enabled || false,
           is_active: true,
-          last_login: null, // Initialize last_login as null for new users
-          metadata: {
-            created_via: 'user_management',
-            original_role: userData.role, // Store original role in metadata
-            device_id: this.currentDeviceId || 'unknown'
-          }
+          last_login: null // Initialize last_login as null for new users
         }
 
         console.log(`🔍 [TENANT DEBUG] User insert data - tenant_id: "${userToInsert.tenant_id}", email: "${userToInsert.email}"`)
