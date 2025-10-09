@@ -762,11 +762,11 @@ const App: React.FC = () => {
 
             // SECONDARY CHECK: Fresh login window (only checked if pending flag passed)
             if (userInLocalStorage && isFreshBrowserSession) {
-              // Check if this is a fresh login (userLoginTimestamp set within last 1 second)
+              // Check if this is a fresh login (userLoginTimestamp set within last 2 seconds)
               // or a stale session attempt
               const loginTimestamp = localStorage.getItem('userLoginTimestamp')
               const loginAge = loginTimestamp ? Date.now() - parseInt(loginTimestamp) : Infinity
-              const isFreshLogin = loginAge < 1000 // CRITICAL FIX: Reduced from 5000ms to 1000ms (1 second)
+              const isFreshLogin = loginAge < 2000 // CRITICAL FIX: 2 seconds to account for React initialization time
 
               if (isFreshLogin) {
                 // Fresh login from LoginPage - allow normal MFA flow
@@ -791,7 +791,7 @@ const App: React.FC = () => {
               } else {
                 // Old or missing timestamp - this is a stale session
                 console.warn('🚨 SECURITY ALERT: Stale session detected - user in localStorage without recent login')
-                console.warn('  Login timestamp age:', loginAge, 'ms (threshold: 1000ms)')
+                console.warn('  Login timestamp age:', loginAge, 'ms (threshold: 2000ms)')
                 console.warn('🚨 This protects against session reuse attacks')
                 hasValidMfaSession = false
                 sessionStorage.setItem('appInitialized', 'true')
