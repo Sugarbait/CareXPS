@@ -99,28 +99,60 @@ class NotesService {
 
   /**
    * Initialize cross-device synchronization capabilities
+   * FIX: Separate auth errors from database errors to prevent false negatives
    */
   private async initializeCrossDeviceSync(): Promise<void> {
     try {
       // Quick test to ensure Supabase is available for cross-device sync
       const { error } = await supabase.from('notes').select('id').limit(1).maybeSingle()
+
       if (error) {
-        // Only log once per session to reduce console noise
-        if (!sessionStorage.getItem('notes-sync-warning-logged')) {
-          safeLog('📝 Notes: localStorage-only mode')
-          sessionStorage.setItem('notes-sync-warning-logged', 'true')
+        // Distinguish between database errors and auth errors
+        const errorMessage = error.message?.toLowerCase() || ''
+        const errorCode = (error as any).code || ''
+
+        // Auth errors (403, JWT, etc.) should NOT mark Supabase unavailable
+        // because database operations work fine with anon key
+        const isAuthError = errorMessage.includes('jwt') ||
+                           errorMessage.includes('auth') ||
+                           errorMessage.includes('forbidden') ||
+                           errorCode === '403'
+
+        if (isAuthError) {
+          // Auth endpoint error - but database is available
+          safeLog('📝 Notes: Auth check skipped, database available')
+          this.isSupabaseAvailable = true
+        } else {
+          // Actual database/connection error
+          if (!sessionStorage.getItem('notes-sync-warning-logged')) {
+            safeLog('📝 Notes: localStorage-only mode (database error)')
+            sessionStorage.setItem('notes-sync-warning-logged', 'true')
+          }
+          this.isSupabaseAvailable = false
+        }
+      } else {
+        // No error - fully available
+        this.isSupabaseAvailable = true
+        safeLog('📝 Notes: Cross-device sync enabled')
+      }
+    } catch (error) {
+      // Network/connection errors - truly unavailable
+      const errorMessage = error instanceof Error ? error.message.toLowerCase() : ''
+      const isNetworkError = errorMessage.includes('fetch') ||
+                            errorMessage.includes('network') ||
+                            errorMessage.includes('timeout')
+
+      if (isNetworkError) {
+        if (!sessionStorage.getItem('notes-connection-error-logged')) {
+          safeLog('📝 Notes: offline mode (network error)')
+          sessionStorage.setItem('notes-connection-error-logged', 'true')
         }
         this.isSupabaseAvailable = false
       } else {
+        // Unknown error - assume available and let first operation determine
+        safeLog('📝 Notes: Optimistic mode (error ignored)')
         this.isSupabaseAvailable = true
       }
-    } catch (error) {
-      // Only log connection errors once per session
-      if (!sessionStorage.getItem('notes-connection-error-logged')) {
-        safeLog('📝 Notes: offline mode (connection error)')
-        sessionStorage.setItem('notes-connection-error-logged', 'true')
-      }
-      this.isSupabaseAvailable = false
     }
   }
 
