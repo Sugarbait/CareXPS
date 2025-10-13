@@ -452,21 +452,34 @@ class StripeInvoiceService {
 
       console.log('📊 Stripe Invoice - All line items added to invoice')
 
-      // Finalize and send if requested
+      // ALWAYS finalize the invoice to get the hosted URL
+      // Finalize but DON'T send (we're handling email with PDF ourselves)
+      console.log('📊 Stripe Invoice - Finalizing invoice to generate hosted URL...')
+      const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id)
+      console.log('✅ Stripe Invoice - Invoice finalized:', {
+        id: finalizedInvoice.id,
+        status: finalizedInvoice.status,
+        hosted_invoice_url: finalizedInvoice.hosted_invoice_url
+      })
+
+      // Only send Stripe's email if explicitly requested (we're handling email ourselves)
       if (options.sendImmediately) {
-        await stripe.invoices.finalizeInvoice(invoice.id)
-        await stripe.invoices.sendInvoice(invoice.id)
+        await stripe.invoices.sendInvoice(finalizedInvoice.id)
+        console.log('📧 Stripe Invoice - Email sent via Stripe')
+      } else {
+        console.log('📧 Stripe Invoice - Skipping Stripe email (handled by EmailJS)')
       }
 
       // Log audit event (optional - don't fail if audit fails)
       try {
         console.log('Stripe invoice created:', {
-          invoiceId: invoice.id,
+          invoiceId: finalizedInvoice.id,
           customerId,
           totalAmount: invoiceData.combinedTotal,
           currency: 'CAD',
           dateRange: invoiceData.dateRange.label,
-          sentImmediately: options.sendImmediately || false
+          sentImmediately: options.sendImmediately || false,
+          hostedUrl: finalizedInvoice.hosted_invoice_url
         })
       } catch (auditError) {
         console.warn('Failed to log invoice creation, continuing anyway:', auditError)
@@ -474,8 +487,8 @@ class StripeInvoiceService {
 
       return {
         success: true,
-        invoiceId: invoice.id,
-        invoiceUrl: invoice.hosted_invoice_url || undefined
+        invoiceId: finalizedInvoice.id,
+        invoiceUrl: finalizedInvoice.hosted_invoice_url || undefined
       }
     } catch (error) {
       console.error('Failed to create Stripe invoice:', error)

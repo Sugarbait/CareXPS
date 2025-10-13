@@ -1237,7 +1237,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
           const emailParams = {
             to_email: invoiceCustomerEmail,
             to_name: invoiceCustomerName,
-            subject: `CareXPS Invoice - ${start.toLocaleDateString()} to ${end.toLocaleDateString()}`,
+            subject: 'CareXPS Service Fees for Phaeton AI',
             invoice_id: invoiceResult.invoiceId,
             total_amount: `CAD $${(((metrics.totalCost || 0) + (metrics.totalSMSCost || 0)) * 1.45).toFixed(2)}`,
             date_range: `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
