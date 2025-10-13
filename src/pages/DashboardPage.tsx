@@ -1217,9 +1217,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            to: invoiceCustomerEmail,
-            subject: `CareXPS Invoice - ${start.toLocaleDateString()} to ${end.toLocaleDateString()}`,
-            html: `
+            recipients: [invoiceCustomerEmail], // Azure Function expects array
+            notification: {
+              title: `CareXPS Invoice - ${start.toLocaleDateString()} to ${end.toLocaleDateString()}`,
+              message: `Dear ${invoiceCustomerName},\n\nYour invoice for the period ${start.toLocaleDateString()} to ${end.toLocaleDateString()} is ready.\n\nInvoice ID: ${invoiceResult.invoiceId}\nTotal Amount: CAD $${(((metrics.totalCost || 0) + (metrics.totalSMSCost || 0)) * 1.45).toFixed(2)}\nDate Range: ${start.toLocaleDateString()} - ${end.toLocaleDateString()}\n\nThank you for your business!`,
+              timestamp: new Date().toISOString(),
+              type: 'invoice'
+            },
+            template: `
               <h2>CareXPS Healthcare CRM Invoice</h2>
               <p>Dear ${invoiceCustomerName},</p>
               <p>Your invoice for the period ${start.toLocaleDateString()} to ${end.toLocaleDateString()} is ready.</p>
