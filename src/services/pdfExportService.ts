@@ -167,27 +167,8 @@ class PDFExportService {
       console.log(`📤 Uploading PDF to Supabase Storage: ${storagePath}`)
       console.log(`📊 PDF size: ${(pdfBlob.size / 1024).toFixed(2)} KB`)
 
-      // Check if bucket exists
-      const { data: buckets, error: bucketListError } = await supabase.storage.listBuckets()
-
-      if (bucketListError) {
-        console.error('❌ Cannot access storage buckets:', bucketListError.message)
-        return {
-          success: false,
-          error: 'Storage service unavailable. Please try again later.'
-        }
-      }
-
-      const invoiceBucket = buckets?.find(bucket => bucket.name === STORAGE_BUCKET)
-      if (!invoiceBucket) {
-        console.error(`❌ Storage bucket "${STORAGE_BUCKET}" does not exist`)
-        return {
-          success: false,
-          error: `Storage bucket "${STORAGE_BUCKET}" not found. Please contact system administrator.`
-        }
-      }
-
-      // Upload to Supabase Storage
+      // Upload directly to Supabase Storage (bucket existence is verified via RLS policies)
+      // Note: listBuckets() requires elevated permissions, so we skip the check and upload directly
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from(STORAGE_BUCKET)
         .upload(storagePath, pdfBlob, {
