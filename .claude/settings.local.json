@@ -176,7 +176,20 @@
       "Bash(move:*)",
       "Bash(start http://localhost:3001/force-clear-storage.html)",
       "Bash(start http://localhost:3001/auto-fix-pierre.html)",
-      "Bash(start:*)"
+      "Bash(start:*)",
+      "Bash(cmd /c move:*)",
+      "Bash(cmd /c copy:*)",
+      "Bash(\"https://anifqpihbnuuciqxddqi.supabase.co/rest/v1/failed_login_attempts?limit=0\" )",
+      "Bash(\"https://anifqpihbnuuciqxddqi.supabase.co/rest/v1/rpc/pg_catalog.information_schema_columns\" )",
+      "Bash(\"https://anifqpihbnuuciqxddqi.supabase.co/rest/v1/failed_login_attempts\" )",
+      "Bash(\"https://anifqpihbnuuciqxddqi.supabase.co/rest/v1/rpc/pgrst_watch\" )",
+      "Bash(\"https://anifqpihbnuuciqxddqi.supabase.co/rest/v1/rpc/notify_pgrst\" )",
+      "Bash(if [ -f \".env.local\" ])",
+      "Bash(then grep -E \"VITE_SUPABASE_URL|VITE_SUPABASE_ANON_KEY|VITE_SUPABASE_SERVICE_ROLE_KEY\" .env.local)",
+      "Bash(else echo \"No .env.local file found\")",
+      "Bash(fi)",
+      "Read(//c/Users/elite/OneDrive - Phaeton AI Inc/Desktop/**)",
+      "WebFetch(domain:www.hostinger.com)"
     ],
     "deny": [],
     "ask": []
