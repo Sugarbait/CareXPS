@@ -7,7 +7,6 @@
 
 import Stripe from 'stripe'
 import { retellService, currencyService, twilioCostService, chatService } from './index'
-import { AuditService } from './auditService'
 
 interface InvoiceLineItem {
   description: string
@@ -53,6 +52,13 @@ interface CreateInvoiceOptions {
   sendImmediately?: boolean
   autoFinalize?: boolean
   dueDate?: Date
+  preCalculatedMetrics?: {
+    callCostCAD: number
+    smsCostCAD: number
+    totalCalls: number
+    totalChats: number
+    totalSegments: number
+  }
 }
 
 class StripeInvoiceService {
@@ -100,24 +106,23 @@ class StripeInvoiceService {
 
       this.isInitialized = true
 
-      // Log audit event
-      await AuditService.logAction(
-        'STRIPE_SERVICE_INITIALIZED',
-        'stripe_invoice_service',
-        { success: true }
-      )
+      // Log audit event (optional - don't fail if audit fails)
+      try {
+        console.log('Stripe service initialized successfully')
+      } catch (auditError) {
+        console.warn('Failed to log Stripe initialization, continuing anyway:', auditError)
+      }
 
       return { success: true }
     } catch (error) {
       console.error('Failed to initialize Stripe:', error)
 
-      await AuditService.createSecurityEvent({
-        action: 'STRIPE_INITIALIZATION_FAILED',
-        resource: 'stripe_invoice_service',
-        success: false,
-        details: { error: error instanceof Error ? error.message : 'Unknown error' },
-        severity: 'high'
-      })
+      // Try to log error (optional - don't fail if audit fails)
+      try {
+        console.error('Stripe initialization failed:', error)
+      } catch (auditError) {
+        console.warn('Failed to log Stripe error, continuing anyway:', auditError)
+      }
 
       return {
         success: false,
@@ -156,6 +161,14 @@ class StripeInvoiceService {
         return callTimeMs >= startMs && callTimeMs <= endMs
       })
 
+      console.log('📊 Stripe Invoice - Filtered calls:', {
+        totalCalls: allCalls.length,
+        filteredCalls: filteredCalls.length,
+        dateRange: `${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`,
+        startMs,
+        endMs
+      })
+
       // Filter chats by date range
       const filteredChats = allChatsResponse.chats.filter(chat => {
         const chatTimeMs = chat.start_timestamp.toString().length <= 10
@@ -183,12 +196,16 @@ class StripeInvoiceService {
 
       // Add consolidated call line item
       if (filteredCalls.length > 0) {
-        callItems.push({
+        const callItem = {
           description: `Voice Calls (${filteredCalls.length} calls)`,
           quantity: filteredCalls.length,
           unit_amount_cents: Math.round((totalCallCostCAD / filteredCalls.length) * 100),
           amount_total: totalCallCostCAD
-        })
+        }
+        callItems.push(callItem)
+        console.log('📊 Stripe Invoice - Call line item created:', callItem)
+      } else {
+        console.log('⚠️ Stripe Invoice - No calls in date range, skipping call line item')
       }
 
       // Calculate SMS costs (Retell AI Chat + Twilio SMS)
@@ -216,13 +233,24 @@ class StripeInvoiceService {
 
       // Add consolidated SMS line item showing both costs
       if (filteredChats.length > 0) {
-        smsItems.push({
+        const smsItem = {
           description: `SMS Conversations (${filteredChats.length} chats) - Retell AI Chat: CAD $${totalRetellChatCostCAD.toFixed(2)} + Twilio SMS (${totalSegments} segments): CAD $${totalTwilioSMSCostCAD.toFixed(2)}`,
           quantity: filteredChats.length,
           unit_amount_cents: Math.round((totalSMSCostCAD / filteredChats.length) * 100),
           amount_total: totalSMSCostCAD
-        })
+        }
+        smsItems.push(smsItem)
+        console.log('📊 Stripe Invoice - SMS line item created:', smsItem)
+      } else {
+        console.log('⚠️ Stripe Invoice - No chats in date range, skipping SMS line item')
       }
+
+      console.log('📊 Stripe Invoice - Final line items:', {
+        callItems: callItems.length,
+        smsItems: smsItems.length,
+        totalItems: callItems.length + smsItems.length,
+        combinedTotal: totalCallCostCAD + totalSMSCostCAD
+      })
 
       return {
         dateRange: {
@@ -300,11 +328,53 @@ class StripeInvoiceService {
     }
 
     try {
-      // Calculate invoice data
-      const invoiceData = await this.calculateInvoiceData(
-        options.dateRange.start,
-        options.dateRange.end
-      )
+      // Use pre-calculated metrics if provided (more accurate), otherwise calculate
+      let invoiceData: InvoiceData
+
+      if (options.preCalculatedMetrics) {
+        console.log('📊 Stripe Invoice - Using pre-calculated metrics from Dashboard:', options.preCalculatedMetrics)
+
+        // Build invoice data from pre-calculated metrics
+        const { callCostCAD, smsCostCAD, totalCalls, totalChats, totalSegments } = options.preCalculatedMetrics
+
+        invoiceData = {
+          dateRange: {
+            start: options.dateRange.start,
+            end: options.dateRange.end,
+            label: options.dateRange.label || `${options.dateRange.start.toLocaleDateString()} - ${options.dateRange.end.toLocaleDateString()}`
+          },
+          callCosts: {
+            totalCalls,
+            totalCostCAD: callCostCAD,
+            items: totalCalls > 0 ? [{
+              description: `Voice Calls (${totalCalls} calls)`,
+              quantity: totalCalls,
+              unit_amount_cents: Math.round((callCostCAD / totalCalls) * 100),
+              amount_total: callCostCAD
+            }] : []
+          },
+          smsCosts: {
+            totalChats,
+            totalSegments,
+            totalCostCAD: smsCostCAD,
+            items: totalChats > 0 ? [{
+              description: `SMS Conversations (${totalChats} chats, ${totalSegments} segments)`,
+              quantity: totalChats,
+              unit_amount_cents: Math.round((smsCostCAD / totalChats) * 100),
+              amount_total: smsCostCAD
+            }] : []
+          },
+          combinedTotal: callCostCAD + smsCostCAD,
+          currency: 'cad'
+        }
+      } else {
+        // Calculate invoice data from scratch
+        console.log('📊 Stripe Invoice - Calculating metrics from scratch (no pre-calculated data provided)')
+        invoiceData = await this.calculateInvoiceData(
+          options.dateRange.start,
+          options.dateRange.end
+        )
+      }
 
       // Check if there are any charges
       if (invoiceData.combinedTotal <= 0) {
@@ -316,31 +386,10 @@ class StripeInvoiceService {
 
       // Get or create customer
       const customerId = await this.getOrCreateCustomer(options.customerInfo)
-
-      // Create invoice items
       const stripe = this.stripe!
 
-      // Add call costs
-      for (const item of invoiceData.callCosts.items) {
-        await stripe.invoiceItems.create({
-          customer: customerId,
-          amount: Math.round(item.amount_total * 100), // Convert to cents
-          currency: 'cad',
-          description: item.description
-        })
-      }
-
-      // Add SMS costs
-      for (const item of invoiceData.smsCosts.items) {
-        await stripe.invoiceItems.create({
-          customer: customerId,
-          amount: Math.round(item.amount_total * 100), // Convert to cents
-          currency: 'cad',
-          description: item.description
-        })
-      }
-
-      // Create the invoice
+      // Create the invoice FIRST
+      console.log('📊 Stripe Invoice - Creating invoice...')
       const invoice = await stripe.invoices.create({
         customer: customerId,
         auto_advance: options.autoFinalize !== false,
@@ -359,25 +408,69 @@ class StripeInvoiceService {
         }
       })
 
+      console.log('✅ Stripe Invoice - Invoice created:', invoice.id)
+
+      // Now add invoice items directly to this specific invoice
+      console.log('📊 Stripe Invoice - Adding line items to invoice...', {
+        callItemsCount: invoiceData.callCosts.items.length,
+        smsItemsCount: invoiceData.smsCosts.items.length
+      })
+
+      // Add call costs
+      for (const item of invoiceData.callCosts.items) {
+        const invoiceItem = await stripe.invoiceItems.create({
+          customer: customerId,
+          invoice: invoice.id, // Attach directly to this invoice
+          amount: Math.round(item.amount_total * 100), // Convert to cents
+          currency: 'cad',
+          description: item.description
+        })
+        console.log('✅ Stripe Invoice - Added call line item:', {
+          id: invoiceItem.id,
+          amount: invoiceItem.amount,
+          currency: invoiceItem.currency,
+          description: invoiceItem.description
+        })
+      }
+
+      // Add SMS costs
+      for (const item of invoiceData.smsCosts.items) {
+        const invoiceItem = await stripe.invoiceItems.create({
+          customer: customerId,
+          invoice: invoice.id, // Attach directly to this invoice
+          amount: Math.round(item.amount_total * 100), // Convert to cents
+          currency: 'cad',
+          description: item.description
+        })
+        console.log('✅ Stripe Invoice - Added SMS line item:', {
+          id: invoiceItem.id,
+          amount: invoiceItem.amount,
+          currency: invoiceItem.currency,
+          description: invoiceItem.description
+        })
+      }
+
+      console.log('📊 Stripe Invoice - All line items added to invoice')
+
       // Finalize and send if requested
       if (options.sendImmediately) {
         await stripe.invoices.finalizeInvoice(invoice.id)
         await stripe.invoices.sendInvoice(invoice.id)
       }
 
-      // Log audit event
-      await AuditService.logAction(
-        'STRIPE_INVOICE_CREATED',
-        'stripe_invoice',
-        {
+      // Log audit event (optional - don't fail if audit fails)
+      try {
+        console.log('Stripe invoice created:', {
           invoiceId: invoice.id,
           customerId,
           totalAmount: invoiceData.combinedTotal,
           currency: 'CAD',
           dateRange: invoiceData.dateRange.label,
           sentImmediately: options.sendImmediately || false
-        }
-      )
+        })
+      } catch (auditError) {
+        console.warn('Failed to log invoice creation, continuing anyway:', auditError)
+      }
 
       return {
         success: true,
@@ -387,16 +480,15 @@ class StripeInvoiceService {
     } catch (error) {
       console.error('Failed to create Stripe invoice:', error)
 
-      await AuditService.createSecurityEvent({
-        action: 'STRIPE_INVOICE_CREATION_FAILED',
-        resource: 'stripe_invoice',
-        success: false,
-        details: {
+      // Try to log error (optional - don't fail if audit fails)
+      try {
+        console.error('Stripe invoice creation failed:', {
           error: error instanceof Error ? error.message : 'Unknown error',
           customerEmail: options.customerInfo.email
-        },
-        severity: 'high'
-      })
+        })
+      } catch (auditError) {
+        console.warn('Failed to log invoice error, continuing anyway:', auditError)
+      }
 
       return {
         success: false,

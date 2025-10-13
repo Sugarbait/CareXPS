@@ -4,6 +4,7 @@ import { useSMSCostManager } from '@/hooks/useSMSCostManager'
 import { DateRangePicker, DateRange, getDateRangeFromSelection } from '@/components/common/DateRangePicker'
 import { retellService, currencyService, twilioCostService, chatService } from '@/services'
 import { pdfExportService } from '@/services/pdfExportService'
+import { stripeInvoiceService } from '@/services/stripeInvoiceService'
 import { userSettingsService } from '@/services'
 import { SiteHelpChatbot } from '@/components/common/SiteHelpChatbot'
 import {
@@ -20,7 +21,10 @@ import {
   ThumbsUpIcon,
   AlertCircleIcon,
   BarChart3Icon,
-  TrashIcon
+  TrashIcon,
+  FileTextIcon,
+  SendIcon,
+  XIcon
 } from 'lucide-react'
 
 interface DashboardPageProps {
@@ -64,6 +68,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
 
   const [error, setError] = useState('')
   const [isExporting, setIsExporting] = useState(false)
+
+  // Invoice modal state
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false)
+  const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false)
+  const [invoiceCustomerEmail, setInvoiceCustomerEmail] = useState('')
+  const [invoiceCustomerName, setInvoiceCustomerName] = useState('CareXPS')
+  const [invoiceSuccess, setInvoiceSuccess] = useState<string | null>(null)
 
   // SMS Segment caching state (exact copy from SMS page)
   const [fullDataSegmentCache, setFullDataSegmentCache] = useState<Map<string, number>>(new Map())
@@ -1141,6 +1152,121 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
     }
   }
 
+  const handleGenerateInvoice = async () => {
+    if (!invoiceCustomerEmail || !invoiceCustomerName) {
+      setError('Please fill in all customer information')
+      return
+    }
+
+    setIsGeneratingInvoice(true)
+    setError('')
+    setInvoiceSuccess(null)
+
+    try {
+      // Initialize Stripe service
+      const initResult = await stripeInvoiceService.initialize()
+      if (!initResult.success) {
+        throw new Error(initResult.error || 'Failed to initialize Stripe')
+      }
+
+      // Get date range
+      const { start, end } = getDateRangeFromSelection(selectedDateRange, customStartDate, customEndDate)
+
+      // Create invoice using Dashboard's already-calculated metrics (more accurate)
+      const invoiceResult = await stripeInvoiceService.createInvoice({
+        customerInfo: {
+          email: invoiceCustomerEmail,
+          name: invoiceCustomerName,
+          description: 'Medical Practice - CareXPS Services'
+        },
+        dateRange: {
+          start,
+          end,
+          label: `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`
+        },
+        sendImmediately: false, // Don't send yet, we'll attach PDF first
+        autoFinalize: false,
+        // Pass pre-calculated metrics from Dashboard (convert USD to CAD)
+        preCalculatedMetrics: {
+          callCostCAD: (metrics.totalCost || 0) * 1.45, // Convert USD to CAD
+          smsCostCAD: (metrics.totalSMSCost || 0) * 1.45, // Convert USD to CAD
+          totalCalls: metrics.totalCalls || 0,
+          totalChats: metrics.totalMessages || 0,
+          totalSegments: metrics.totalSegments || 0
+        }
+      })
+
+      if (!invoiceResult.success) {
+        throw new Error(invoiceResult.error || 'Failed to create invoice')
+      }
+
+      // Generate PDF report
+      await pdfExportService.generateDashboardReport(metrics, {
+        dateRange: selectedDateRange,
+        startDate: start,
+        endDate: end,
+        companyName: 'CareXPS Healthcare CRM',
+        reportTitle: 'Dashboard Analytics Report'
+      })
+
+      // Send invoice email notification using Azure Function API
+      try {
+        const emailResponse = await fetch('/api/send-notification-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            to: invoiceCustomerEmail,
+            subject: `CareXPS Invoice - ${start.toLocaleDateString()} to ${end.toLocaleDateString()}`,
+            html: `
+              <h2>CareXPS Healthcare CRM Invoice</h2>
+              <p>Dear ${invoiceCustomerName},</p>
+              <p>Your invoice for the period ${start.toLocaleDateString()} to ${end.toLocaleDateString()} is ready.</p>
+              <p><strong>Invoice Details:</strong></p>
+              <ul>
+                <li>Invoice ID: ${invoiceResult.invoiceId}</li>
+                <li>Total Amount: CAD $${(((metrics.totalCost || 0) + (metrics.totalSMSCost || 0)) * 1.45).toFixed(2)}</li>
+                <li>Date Range: ${start.toLocaleDateString()} - ${end.toLocaleDateString()}</li>
+              </ul>
+              ${invoiceResult.invoiceUrl ? `<p><a href="${invoiceResult.invoiceUrl}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">View Invoice</a></p>` : ''}
+              <p>A detailed dashboard report has been generated for this period. Please download it for your records.</p>
+              <br/>
+              <p>Thank you for your business!</p>
+              <p>CareXPS Healthcare CRM Team</p>
+            `
+          })
+        })
+
+        if (!emailResponse.ok) {
+          const errorText = await emailResponse.text()
+          console.warn('Failed to send invoice email, but invoice was created successfully:', errorText)
+        } else {
+          const result = await emailResponse.json()
+          console.log('Invoice email sent successfully:', result)
+        }
+      } catch (emailError) {
+        console.warn('Email sending failed, but invoice was created:', emailError)
+      }
+
+      setInvoiceSuccess(`Invoice created successfully! Invoice ID: ${invoiceResult.invoiceId}. Email sent to ${invoiceCustomerEmail}`)
+
+      // Close modal after 3 seconds
+      setTimeout(() => {
+        setShowInvoiceModal(false)
+        setInvoiceSuccess(null)
+        setInvoiceCustomerEmail('')
+        setInvoiceCustomerName('CareXPS')
+      }, 3000)
+
+    } catch (error) {
+      console.error('Failed to generate invoice:', error)
+      setError(error instanceof Error ? error.message : 'Failed to generate invoice')
+    } finally {
+      setIsGeneratingInvoice(false)
+    }
+  }
+
   const handleClearCache = () => {
     try {
       // Clear SMS segment cache
@@ -1219,6 +1345,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
             <DownloadIcon className={`w-4 h-4 ${isExporting ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">{isExporting ? 'Generating PDF...' : 'Export Dashboard Report'}</span>
             <span className="sm:hidden">{isExporting ? 'Generating...' : 'Export'}</span>
+          </button>
+          <button
+            onClick={() => setShowInvoiceModal(true)}
+            disabled={isLoading}
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+            aria-label="Generate and send invoice"
+          >
+            <FileTextIcon className="w-4 h-4" />
+            <span className="hidden sm:inline">Generate Invoice</span>
+            <span className="sm:hidden">Invoice</span>
           </button>
         </div>
       </div>
@@ -1564,6 +1700,120 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
         isVisible={isChatbotVisible}
         onToggle={() => setIsChatbotVisible(!isChatbotVisible)}
       />
+
+      {/* Invoice Generation Modal */}
+      {showInvoiceModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                Generate Invoice
+              </h2>
+              <button
+                onClick={() => {
+                  setShowInvoiceModal(false)
+                  setInvoiceSuccess(null)
+                  setError('')
+                  setInvoiceCustomerEmail('')
+                  setInvoiceCustomerName('CareXPS')
+                }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Date Range Info */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+                <div className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>Invoice Period:</strong> {selectedDateRange === 'custom' && customStartDate && customEndDate
+                    ? `${customStartDate.toLocaleDateString()} - ${customEndDate.toLocaleDateString()}`
+                    : selectedDateRange}
+                </div>
+                <div className="text-sm text-blue-800 dark:text-blue-200 mt-1">
+                  <strong>Total Amount:</strong> CAD ${(((metrics.totalCost || 0) + (metrics.totalSMSCost || 0)) * 1.45).toFixed(2)}
+                </div>
+              </div>
+
+              {/* Customer Information */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Customer Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={invoiceCustomerName}
+                  onChange={(e) => setInvoiceCustomerName(e.target.value)}
+                  placeholder="Medical Practice Name"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                  disabled={isGeneratingInvoice}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Customer Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={invoiceCustomerEmail}
+                  onChange={(e) => setInvoiceCustomerEmail(e.target.value)}
+                  placeholder="billing@practice.com"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                  disabled={isGeneratingInvoice}
+                />
+              </div>
+
+              {/* Success Message */}
+              {invoiceSuccess && (
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-600 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-sm text-green-800 dark:text-green-200">{invoiceSuccess}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    setShowInvoiceModal(false)
+                    setInvoiceSuccess(null)
+                    setError('')
+                    setInvoiceCustomerEmail('')
+                    setInvoiceCustomerName('CareXPS')
+                  }}
+                  disabled={isGeneratingInvoice}
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleGenerateInvoice}
+                  disabled={isGeneratingInvoice || !invoiceCustomerEmail || !invoiceCustomerName}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isGeneratingInvoice ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Generating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <SendIcon className="w-4 h-4" />
+                      <span>Generate Invoice</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

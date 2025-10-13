@@ -81,12 +81,7 @@ class PDFExportService {
   private async generateCoverPage(metrics: DashboardMetrics, options: ExportOptions): Promise<void> {
     const centerX = this.pageWidth / 2
 
-    // Header gradient background (simulated with rectangles)
-    this.pdf.setFillColor(59, 130, 246) // Blue-600
-    this.pdf.rect(0, 0, this.pageWidth, 80, 'F')
-
-    this.pdf.setFillColor(147, 197, 253) // Blue-300
-    this.pdf.rect(0, 60, this.pageWidth, 20, 'F')
+    // Clean white header (blue background removed for professional appearance)
 
     // Add CareXPS logo
     try {
@@ -96,7 +91,7 @@ class PDFExportService {
     }
 
     // Company title and report info
-    this.pdf.setTextColor(255, 255, 255)
+    this.pdf.setTextColor(31, 41, 55) // Gray-800 (changed from white)
     this.pdf.setFontSize(24)
     this.pdf.setFont('helvetica', 'bold')
     this.pdf.text(options.companyName || 'CareXPS Healthcare CRM', centerX, 45, { align: 'center' })
@@ -107,6 +102,7 @@ class PDFExportService {
 
     // Date range
     this.pdf.setFontSize(11)
+    this.pdf.setTextColor(75, 85, 99) // Gray-600
     this.pdf.text(`Report Period: ${options.dateRange}`, centerX, 70, { align: 'center' })
 
     // Key metrics summary box
@@ -119,8 +115,8 @@ class PDFExportService {
     this.pdf.setFont('helvetica', 'bold')
     this.pdf.text('Executive Summary', centerX, 115, { align: 'center' })
 
-    // Combined cost highlight
-    const totalCombinedCost = metrics.totalCost + metrics.totalSMSCost
+    // Combined cost highlight (USD to CAD conversion)
+    const totalCombinedCost = (metrics.totalCost + metrics.totalSMSCost) * 1.45
     this.pdf.setFontSize(32)
     this.pdf.setTextColor(34, 197, 94) // Green-500
     this.pdf.text(`CAD $${totalCombinedCost.toFixed(2)}`, centerX, 135, { align: 'center' })
@@ -167,7 +163,7 @@ class PDFExportService {
     this.pdf.text('Detailed Metrics Analysis', this.margin, yPosition)
     yPosition += 20
 
-    // Call Metrics Section
+    // Call Metrics Section (USD to CAD conversion)
     this.generateMetricsSection(
       'Call Analytics',
       [
@@ -175,24 +171,24 @@ class PDFExportService {
         { label: 'Average Call Duration', value: metrics.avgCallDuration, color: [34, 197, 94] },
         { label: 'Total Talk Time', value: metrics.totalCallDuration, color: [168, 85, 247] },
         { label: 'Call Success Rate', value: `${metrics.callSuccessRate.toFixed(1)}%`, color: [59, 130, 246] },
-        { label: 'Average Cost per Call', value: `CAD $${metrics.avgCostPerCall.toFixed(3)}`, color: [239, 68, 68] },
-        { label: 'Highest Cost Call', value: `CAD $${metrics.highestCostCall.toFixed(3)}`, color: [245, 158, 11] },
-        { label: 'Lowest Cost Call', value: `CAD $${metrics.lowestCostCall.toFixed(3)}`, color: [34, 197, 94] },
-        { label: 'Total Call Costs', value: `CAD $${metrics.totalCost.toFixed(2)}`, color: [239, 68, 68] }
+        { label: 'Average Cost per Call', value: `CAD $${(metrics.avgCostPerCall * 1.45).toFixed(3)}`, color: [239, 68, 68] },
+        { label: 'Highest Cost Call', value: `CAD $${(metrics.highestCostCall * 1.45).toFixed(3)}`, color: [245, 158, 11] },
+        { label: 'Lowest Cost Call', value: `CAD $${(metrics.lowestCostCall * 1.45).toFixed(3)}`, color: [34, 197, 94] },
+        { label: 'Total Call Costs', value: `CAD $${(metrics.totalCost * 1.45).toFixed(2)}`, color: [239, 68, 68] }
       ],
       yPosition
     )
     yPosition += 80
 
-    // SMS Metrics Section
+    // SMS Metrics Section (USD to CAD conversion)
     this.generateMetricsSection(
       'SMS Analytics',
       [
         { label: 'Total Conversations', value: metrics.totalMessages.toString(), color: [168, 85, 247] },
         { label: 'Avg Messages per Chat', value: metrics.avgMessagesPerChat.toFixed(1), color: [34, 197, 94] },
         { label: 'Message Delivery Rate', value: `${metrics.messageDeliveryRate.toFixed(1)}%`, color: [59, 130, 246] },
-        { label: 'Avg Cost per Message', value: `CAD $${metrics.avgCostPerMessage.toFixed(3)}`, color: [239, 68, 68] },
-        { label: 'Total SMS Costs', value: `CAD $${metrics.totalSMSCost.toFixed(2)}`, color: [239, 68, 68] }
+        { label: 'Avg Cost per Message', value: `CAD $${(metrics.avgCostPerMessage * 1.45).toFixed(3)}`, color: [239, 68, 68] },
+        { label: 'Total SMS Costs', value: `CAD $${(metrics.totalSMSCost * 1.45).toFixed(2)}`, color: [239, 68, 68] }
       ],
       yPosition
     )
@@ -307,7 +303,7 @@ class PDFExportService {
 
     // Cost breakdown pie chart
     await this.generateCostBreakdownChart(metrics, yPosition)
-    yPosition += 90
+    yPosition += 115 // Increased spacing to prevent text overlap with Performance Metrics
 
     // Performance metrics chart
     await this.generatePerformanceChart(metrics, yPosition)
@@ -346,11 +342,11 @@ class PDFExportService {
       this.pdf.circle(centerX, chartCenterY, chartRadius, 'F')
     }
 
-    // Legend
+    // Legend (USD to CAD conversion)
     const legendY = chartCenterY + chartRadius + 15
     this.generateChartLegend([
-      { label: `Call Costs: CAD $${metrics.totalCost.toFixed(2)} (${callPercentage.toFixed(1)}%)`, color: [59, 130, 246] },
-      { label: `SMS Costs: CAD $${metrics.totalSMSCost.toFixed(2)} (${smsPercentage.toFixed(1)}%)`, color: [168, 85, 247] }
+      { label: `Call Costs: CAD $${(metrics.totalCost * 1.45).toFixed(2)} (${callPercentage.toFixed(1)}%)`, color: [59, 130, 246] },
+      { label: `SMS Costs: CAD $${(metrics.totalSMSCost * 1.45).toFixed(2)} (${smsPercentage.toFixed(1)}%)`, color: [168, 85, 247] }
     ], legendY)
   }
 
@@ -392,13 +388,33 @@ class PDFExportService {
   }
 
   private drawPieSlice(centerX: number, centerY: number, radius: number, startAngle: number, endAngle: number): void {
-    const startX = centerX + radius * Math.cos(startAngle)
-    const startY = centerY + radius * Math.sin(startAngle)
-    const endX = centerX + radius * Math.cos(endAngle)
-    const endY = centerY + radius * Math.sin(endAngle)
+    // Draw proper pie slice using arc approximation with multiple segments
+    const segments = 50 // Number of segments for smooth arc
+    const angleStep = (endAngle - startAngle) / segments
 
-    // For simplicity, we'll draw sectors as triangular approximations
-    this.pdf.triangle(centerX, centerY, startX, startY, endX, endY, 'F')
+    // Start path at center
+    const points: Array<{ x: number; y: number }> = [{ x: centerX, y: centerY }]
+
+    // Add arc points
+    for (let i = 0; i <= segments; i++) {
+      const angle = startAngle + (i * angleStep)
+      points.push({
+        x: centerX + radius * Math.cos(angle),
+        y: centerY + radius * Math.sin(angle)
+      })
+    }
+
+    // Draw filled polygon
+    if (points.length >= 3) {
+      // jsPDF doesn't have a direct polygon method, so we'll use lines
+      this.pdf.lines(
+        points.slice(1).map((p, i) => [p.x - points[i].x, p.y - points[i].y]),
+        points[0].x,
+        points[0].y,
+        [1, 1],
+        'F'
+      )
+    }
   }
 
   private generateChartLegend(items: Array<{ label: string; color: [number, number, number] }>, yPosition: number): void {
@@ -435,8 +451,7 @@ class PDFExportService {
     this.generateRecommendationsSection(metrics, yPosition)
     yPosition += 80
 
-    // Compliance notice
-    this.generateComplianceSection(yPosition)
+    // Compliance notice removed per user request
   }
 
   private generateHighlightsSection(metrics: DashboardMetrics, yPosition: number): void {
@@ -448,7 +463,7 @@ class PDFExportService {
 
     const highlights = [
       `Generated ${metrics.totalCalls} calls with ${metrics.totalMessages} SMS conversations`,
-      `Total service costs: CAD $${(metrics.totalCost + metrics.totalSMSCost).toFixed(2)}`,
+      `Total service costs: CAD $${((metrics.totalCost + metrics.totalSMSCost) * 1.45).toFixed(2)}`,
       `Average call duration: ${metrics.avgCallDuration}`,
       `System reliability: ${metrics.callSuccessRate.toFixed(1)}% success rate`
     ]
@@ -486,22 +501,38 @@ class PDFExportService {
 
   private generateRecommendations(metrics: DashboardMetrics): string[] {
     const recommendations: string[] = []
+    const totalCombinedCost = metrics.totalCost + metrics.totalSMSCost
 
-    if (metrics.avgCostPerCall > 0.50) {
+    // Cost optimization recommendations (only if costs are significant)
+    if (metrics.avgCostPerCall > 0.50 && metrics.totalCalls > 10) {
       recommendations.push('Consider optimizing call durations to reduce per-call costs while maintaining service quality.')
     }
 
-    if (metrics.callSuccessRate < 85) {
+    // Call success rate recommendations
+    if (metrics.callSuccessRate < 85 && metrics.totalCalls > 5) {
       recommendations.push('Investigate technical issues affecting call success rates to improve system reliability.')
+    } else if (metrics.callSuccessRate >= 95 && metrics.totalCalls > 10) {
+      recommendations.push('Excellent call success rate maintained - continue current operational practices.')
     }
 
-    if (metrics.totalMessages < metrics.totalCalls) {
-      recommendations.push('Explore SMS engagement opportunities to enhance customer communication and support.')
+    // SMS engagement recommendations (only if NO or very low SMS usage)
+    if (metrics.totalMessages === 0 && metrics.totalCalls > 10) {
+      recommendations.push('Consider implementing SMS engagement to enhance customer communication and support.')
+    } else if (metrics.totalMessages > 0 && metrics.totalMessages > metrics.totalCalls * 0.5) {
+      recommendations.push('Strong SMS engagement observed - continue leveraging multi-channel communication strategies.')
     }
 
+    // Cost efficiency recommendations
+    if (totalCombinedCost > 100 && metrics.totalCalls > 20) {
+      recommendations.push('High service volume detected - consider implementing cost monitoring alerts and budget controls.')
+    } else if (totalCombinedCost < 50 && metrics.totalCalls > 0) {
+      recommendations.push('Cost-effective operations maintained - current service levels are sustainable.')
+    }
+
+    // Always add general monitoring recommendation
     recommendations.push('Continue monitoring costs and performance metrics to identify optimization opportunities.')
-    recommendations.push('Implement regular review cycles to track trends and adjust strategies accordingly.')
 
+    // Return top 4 recommendations
     return recommendations.slice(0, 4)
   }
 
@@ -562,9 +593,9 @@ class PDFExportService {
           try {
             const base64Data = reader.result as string
 
-            // Calculate logo dimensions (maintaining aspect ratio)
-            const logoWidth = 30 // mm
-            const logoHeight = 15 // mm (approximate 2:1 ratio)
+            // Calculate logo dimensions (much wider aspect ratio to match actual logo)
+            const logoWidth = 70 // mm
+            const logoHeight = 12 // mm (approximately 6:1 ratio for proper proportions)
 
             // Add the logo to the PDF
             this.pdf.addImage(
