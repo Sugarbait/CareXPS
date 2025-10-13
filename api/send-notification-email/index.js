@@ -53,13 +53,18 @@ const getEmailPassword = (context) => {
 };
 
 // SMTP Configuration for Hostinger
+// Using port 587 with TLS/STARTTLS per Hostinger recommendation for encryption issues
 const getSMTPConfig = (context) => {
   const password = getEmailPassword(context);
 
   return {
     host: 'smtp.hostinger.com',
-    port: 465,
-    secure: true, // SSL
+    port: 587, // Changed from 465 to 587 for TLS/STARTTLS
+    secure: false, // Changed from true - use STARTTLS instead of SSL
+    requireTLS: true, // Force TLS upgrade via STARTTLS
+    tls: {
+      rejectUnauthorized: false // Accept self-signed certificates if needed
+    },
     auth: {
       user: 'carexps@phaetonai.com',
       pass: password
