@@ -1200,8 +1200,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
         throw new Error(invoiceResult.error || 'Failed to create invoice')
       }
 
-      // Generate PDF report for email attachment (without downloading)
-      const pdfData = await pdfExportService.generateDashboardReportForEmail(metrics, {
+      // Upload PDF report to Supabase Storage and get download link
+      console.log('📤 Uploading PDF report to Supabase Storage...')
+      const pdfUploadResult = await pdfExportService.uploadReportToStorage(metrics, {
         dateRange: selectedDateRange,
         startDate: start,
         endDate: end,
@@ -1209,13 +1210,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
         reportTitle: 'Dashboard Analytics Report'
       })
 
-      console.log('📄 PDF generated for email attachment:', {
-        filename: pdfData.filename,
-        base64Length: pdfData.base64.length,
-        estimatedSizeKB: Math.round(pdfData.base64.length * 0.75 / 1024)
+      if (!pdfUploadResult.success) {
+        console.warn('PDF upload failed, but invoice was created:', pdfUploadResult.error)
+      }
+
+      console.log('📄 PDF upload result:', {
+        success: pdfUploadResult.success,
+        filename: pdfUploadResult.filename,
+        hasDownloadUrl: !!pdfUploadResult.downloadUrl
       })
 
-      // Send invoice email notification using EmailJS with PDF attachment
+      // Send invoice email notification using EmailJS with PDF download link
       try {
         // Dynamically import EmailJS
         const emailjs = (await import('@emailjs/browser')).default
@@ -1228,7 +1233,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
         if (!serviceId || !templateId || !publicKey) {
           console.warn('EmailJS not configured - skipping email notification')
         } else {
-          // Send email using EmailJS with PDF attachment
+          // Send email using EmailJS with PDF download link
           const emailParams = {
             to_email: invoiceCustomerEmail,
             to_name: invoiceCustomerName,
@@ -1241,19 +1246,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
             sms_cost: `CAD $${((metrics.totalSMSCost || 0) * 1.45).toFixed(2)}`,
             total_calls: metrics.totalCalls || 0,
             total_chats: metrics.totalMessages || 0,
-            // Attach PDF report
-            attachment: pdfData.base64,
-            attachment_name: pdfData.filename
+            // Add PDF download link (7-day expiry)
+            pdf_download_link: pdfUploadResult.downloadUrl || 'PDF upload failed - please contact support',
+            pdf_filename: pdfUploadResult.filename || 'Dashboard Report',
+            pdf_expiry_days: '7'
           }
 
           await emailjs.send(serviceId, templateId, emailParams, publicKey)
-          console.log('✅ Invoice email sent successfully via EmailJS with PDF attachment')
+          console.log('✅ Invoice email sent successfully via EmailJS with PDF download link')
         }
       } catch (emailError) {
         console.warn('Email sending failed, but invoice was created:', emailError)
       }
 
-      setInvoiceSuccess(`Invoice created successfully! Invoice ID: ${invoiceResult.invoiceId}. Email sent to ${invoiceCustomerEmail}`)
+      setInvoiceSuccess(`Invoice created successfully! Invoice ID: ${invoiceResult.invoiceId}. Email with PDF download link sent to ${invoiceCustomerEmail}`)
 
       // Close modal after 3 seconds
       setTimeout(() => {

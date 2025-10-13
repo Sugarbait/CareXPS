@@ -6,6 +6,8 @@
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import { format, startOfDay, endOfDay } from 'date-fns'
+import { supabase } from '@/config/supabase'
+import { auditLogger } from './auditLogger'
 
 interface DashboardMetrics {
   totalCalls: number
@@ -121,6 +123,131 @@ class PDFExportService {
 
     } catch (error) {
       throw new Error('Failed to generate PDF report for email')
+    }
+  }
+
+  /**
+   * Generate dashboard report, upload to Supabase Storage, and return download link
+   * @param metrics Dashboard metrics
+   * @param options Export options
+   * @returns Object with download URL and filename
+   */
+  async uploadReportToStorage(
+    metrics: DashboardMetrics,
+    options: ExportOptions
+  ): Promise<{ success: boolean; downloadUrl?: string; filename?: string; error?: string }> {
+    const STORAGE_BUCKET = 'invoices'
+
+    try {
+      console.log('📄 Generating PDF for storage upload...')
+
+      // Reset PDF
+      this.pdf = new jsPDF('p', 'mm', 'a4')
+
+      // Generate cover page
+      await this.generateCoverPage(metrics, options)
+
+      // Add new page for detailed metrics
+      this.pdf.addPage()
+      this.generateMetricsPage(metrics, options)
+
+      // Add charts page
+      this.pdf.addPage()
+      await this.generateChartsPage(metrics, options)
+
+      // Add summary page
+      this.pdf.addPage()
+      this.generateSummaryPage(metrics, options)
+
+      // Get PDF as blob
+      const pdfBlob = this.pdf.output('blob')
+      const fileName = this.generateFileName(options)
+      const storagePath = `reports/${Date.now()}_${fileName}`
+
+      console.log(`📤 Uploading PDF to Supabase Storage: ${storagePath}`)
+      console.log(`📊 PDF size: ${(pdfBlob.size / 1024).toFixed(2)} KB`)
+
+      // Check if bucket exists
+      const { data: buckets, error: bucketListError } = await supabase.storage.listBuckets()
+
+      if (bucketListError) {
+        console.error('❌ Cannot access storage buckets:', bucketListError.message)
+        return {
+          success: false,
+          error: 'Storage service unavailable. Please try again later.'
+        }
+      }
+
+      const invoiceBucket = buckets?.find(bucket => bucket.name === STORAGE_BUCKET)
+      if (!invoiceBucket) {
+        console.error(`❌ Storage bucket "${STORAGE_BUCKET}" does not exist`)
+        return {
+          success: false,
+          error: `Storage bucket "${STORAGE_BUCKET}" not found. Please contact system administrator.`
+        }
+      }
+
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(storagePath, pdfBlob, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: 'application/pdf'
+        })
+
+      if (uploadError) {
+        console.error('❌ Supabase Storage upload failed:', uploadError.message)
+        return {
+          success: false,
+          error: `Upload failed: ${uploadError.message}`
+        }
+      }
+
+      console.log('✅ PDF uploaded successfully to Supabase Storage')
+
+      // Generate signed URL (7 days expiry)
+      const EXPIRY_SECONDS = 7 * 24 * 60 * 60 // 7 days
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .createSignedUrl(storagePath, EXPIRY_SECONDS)
+
+      if (signedUrlError) {
+        console.error('❌ Failed to generate signed URL:', signedUrlError.message)
+        // Try to clean up uploaded file
+        await supabase.storage.from(STORAGE_BUCKET).remove([storagePath])
+        return {
+          success: false,
+          error: `Failed to generate download link: ${signedUrlError.message}`
+        }
+      }
+
+      console.log('✅ Signed URL generated successfully')
+      console.log(`🔗 Download link expires in 7 days`)
+
+      // Log successful upload for audit trail
+      await auditLogger.logSecurityEvent('INVOICE_PDF_UPLOADED', 'storage', true, {
+        filename: fileName,
+        storagePath,
+        sizeKB: (pdfBlob.size / 1024).toFixed(2),
+        expiryDays: 7
+      })
+
+      return {
+        success: true,
+        downloadUrl: signedUrlData.signedUrl,
+        filename: fileName
+      }
+
+    } catch (error: any) {
+      console.error('❌ PDF upload to storage failed:', error)
+      await auditLogger.logSecurityEvent('INVOICE_PDF_UPLOAD_ERROR', 'storage', false, {
+        error: error.message
+      })
+      return {
+        success: false,
+        error: `PDF upload failed: ${error.message}`
+      }
     }
   }
 
