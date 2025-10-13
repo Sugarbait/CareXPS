@@ -1209,46 +1209,36 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
         reportTitle: 'Dashboard Analytics Report'
       })
 
-      // Send invoice email notification using Azure Function API
+      // Send invoice email notification using EmailJS
       try {
-        const emailResponse = await fetch('/api/send-notification-email', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            recipients: [invoiceCustomerEmail], // Azure Function expects array
-            notification: {
-              title: `CareXPS Invoice - ${start.toLocaleDateString()} to ${end.toLocaleDateString()}`,
-              message: `Dear ${invoiceCustomerName},\n\nYour invoice for the period ${start.toLocaleDateString()} to ${end.toLocaleDateString()} is ready.\n\nInvoice ID: ${invoiceResult.invoiceId}\nTotal Amount: CAD $${(((metrics.totalCost || 0) + (metrics.totalSMSCost || 0)) * 1.45).toFixed(2)}\nDate Range: ${start.toLocaleDateString()} - ${end.toLocaleDateString()}\n\nThank you for your business!`,
-              timestamp: new Date().toISOString(),
-              type: 'invoice'
-            },
-            template: `
-              <h2>CareXPS Healthcare CRM Invoice</h2>
-              <p>Dear ${invoiceCustomerName},</p>
-              <p>Your invoice for the period ${start.toLocaleDateString()} to ${end.toLocaleDateString()} is ready.</p>
-              <p><strong>Invoice Details:</strong></p>
-              <ul>
-                <li>Invoice ID: ${invoiceResult.invoiceId}</li>
-                <li>Total Amount: CAD $${(((metrics.totalCost || 0) + (metrics.totalSMSCost || 0)) * 1.45).toFixed(2)}</li>
-                <li>Date Range: ${start.toLocaleDateString()} - ${end.toLocaleDateString()}</li>
-              </ul>
-              ${invoiceResult.invoiceUrl ? `<p><a href="${invoiceResult.invoiceUrl}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">View Invoice</a></p>` : ''}
-              <p>A detailed dashboard report has been generated for this period. Please download it for your records.</p>
-              <br/>
-              <p>Thank you for your business!</p>
-              <p>CareXPS Healthcare CRM Team</p>
-            `
-          })
-        })
+        // Dynamically import EmailJS
+        const emailjs = (await import('@emailjs/browser')).default
 
-        if (!emailResponse.ok) {
-          const errorText = await emailResponse.text()
-          console.warn('Failed to send invoice email, but invoice was created successfully:', errorText)
+        // Get EmailJS credentials from environment variables
+        const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID
+        const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID
+        const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY
+
+        if (!serviceId || !templateId || !publicKey) {
+          console.warn('EmailJS not configured - skipping email notification')
         } else {
-          const result = await emailResponse.json()
-          console.log('Invoice email sent successfully:', result)
+          // Send email using EmailJS
+          const emailParams = {
+            to_email: invoiceCustomerEmail,
+            to_name: invoiceCustomerName,
+            subject: `CareXPS Invoice - ${start.toLocaleDateString()} to ${end.toLocaleDateString()}`,
+            invoice_id: invoiceResult.invoiceId,
+            total_amount: `CAD $${(((metrics.totalCost || 0) + (metrics.totalSMSCost || 0)) * 1.45).toFixed(2)}`,
+            date_range: `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
+            invoice_url: invoiceResult.invoiceUrl || '',
+            call_cost: `CAD $${((metrics.totalCost || 0) * 1.45).toFixed(2)}`,
+            sms_cost: `CAD $${((metrics.totalSMSCost || 0) * 1.45).toFixed(2)}`,
+            total_calls: metrics.totalCalls || 0,
+            total_chats: metrics.totalMessages || 0
+          }
+
+          await emailjs.send(serviceId, templateId, emailParams, publicKey)
+          console.log('✅ Invoice email sent successfully via EmailJS')
         }
       } catch (emailError) {
         console.warn('Email sending failed, but invoice was created:', emailError)
