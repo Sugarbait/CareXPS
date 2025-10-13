@@ -78,6 +78,52 @@ class PDFExportService {
     }
   }
 
+  /**
+   * Generate dashboard report and return as base64 for email attachment
+   * @param metrics Dashboard metrics
+   * @param options Export options
+   * @returns Object with base64 PDF data and filename
+   */
+  async generateDashboardReportForEmail(
+    metrics: DashboardMetrics,
+    options: ExportOptions
+  ): Promise<{ base64: string; filename: string }> {
+    try {
+      // Reset PDF
+      this.pdf = new jsPDF('p', 'mm', 'a4')
+
+      // Generate cover page
+      await this.generateCoverPage(metrics, options)
+
+      // Add new page for detailed metrics
+      this.pdf.addPage()
+      this.generateMetricsPage(metrics, options)
+
+      // Add charts page
+      this.pdf.addPage()
+      await this.generateChartsPage(metrics, options)
+
+      // Add summary page
+      this.pdf.addPage()
+      this.generateSummaryPage(metrics, options)
+
+      // Get PDF as base64 string
+      const fileName = this.generateFileName(options)
+      const pdfOutput = this.pdf.output('datauristring') // Returns: data:application/pdf;base64,JVBERi0xLjM...
+
+      // Extract base64 data (remove the data:application/pdf;base64, prefix)
+      const base64Data = pdfOutput.split(',')[1]
+
+      return {
+        base64: base64Data,
+        filename: fileName
+      }
+
+    } catch (error) {
+      throw new Error('Failed to generate PDF report for email')
+    }
+  }
+
   private async generateCoverPage(metrics: DashboardMetrics, options: ExportOptions): Promise<void> {
     const centerX = this.pageWidth / 2
 

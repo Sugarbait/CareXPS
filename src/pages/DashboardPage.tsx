@@ -1200,8 +1200,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
         throw new Error(invoiceResult.error || 'Failed to create invoice')
       }
 
-      // Generate PDF report
-      await pdfExportService.generateDashboardReport(metrics, {
+      // Generate PDF report for email attachment (without downloading)
+      const pdfData = await pdfExportService.generateDashboardReportForEmail(metrics, {
         dateRange: selectedDateRange,
         startDate: start,
         endDate: end,
@@ -1209,7 +1209,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
         reportTitle: 'Dashboard Analytics Report'
       })
 
-      // Send invoice email notification using EmailJS
+      console.log('📄 PDF generated for email attachment:', {
+        filename: pdfData.filename,
+        base64Length: pdfData.base64.length,
+        estimatedSizeKB: Math.round(pdfData.base64.length * 0.75 / 1024)
+      })
+
+      // Send invoice email notification using EmailJS with PDF attachment
       try {
         // Dynamically import EmailJS
         const emailjs = (await import('@emailjs/browser')).default
@@ -1222,7 +1228,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
         if (!serviceId || !templateId || !publicKey) {
           console.warn('EmailJS not configured - skipping email notification')
         } else {
-          // Send email using EmailJS
+          // Send email using EmailJS with PDF attachment
           const emailParams = {
             to_email: invoiceCustomerEmail,
             to_name: invoiceCustomerName,
@@ -1234,11 +1240,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
             call_cost: `CAD $${((metrics.totalCost || 0) * 1.45).toFixed(2)}`,
             sms_cost: `CAD $${((metrics.totalSMSCost || 0) * 1.45).toFixed(2)}`,
             total_calls: metrics.totalCalls || 0,
-            total_chats: metrics.totalMessages || 0
+            total_chats: metrics.totalMessages || 0,
+            // Attach PDF report
+            attachment: pdfData.base64,
+            attachment_name: pdfData.filename
           }
 
           await emailjs.send(serviceId, templateId, emailParams, publicKey)
-          console.log('✅ Invoice email sent successfully via EmailJS')
+          console.log('✅ Invoice email sent successfully via EmailJS with PDF attachment')
         }
       } catch (emailError) {
         console.warn('Email sending failed, but invoice was created:', emailError)
