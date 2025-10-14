@@ -100,7 +100,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     // CRITICAL: Hard-coded Super User enforcement for specific emails
-    if (newUser.email === 'pierre@phaetonai.com' || newUser.email === 'elmfarrell@yahoo.com') {
+    if (newUser && (newUser.email === 'pierre@phaetonai.com' || newUser.email === 'elmfarrell@yahoo.com')) {
       newUser.role = 'super_user'
       console.log(`🔐 HARD-CODED SUPER USER: Enforced super_user role for ${newUser.email} in AuthContext.setUser`)
     }

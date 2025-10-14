@@ -157,7 +157,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
           // Check actual MFA status from service
           let actualMFAEnabled = false
           try {
-            actualMFAEnabled = await FreshMfaService.hasMFAEnabled(user.id)
+            actualMFAEnabled = await FreshMfaService.isMfaEnabled(user.id)
             console.log('Actual MFA status from service:', actualMFAEnabled)
           } catch (error) {
             console.warn('Failed to get MFA status from service:', error)
