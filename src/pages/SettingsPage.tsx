@@ -18,7 +18,8 @@ import {
   QrCodeIcon,
   AlertTriangleIcon,
   KeyIcon,
-  LinkIcon
+  LinkIcon,
+  DollarSignIcon
 } from 'lucide-react'
 import { TENANT_ID } from '@/config/tenantConfig'
 import FreshMfaService from '@/services/freshMfaService'
@@ -38,6 +39,7 @@ import { SiteHelpChatbot } from '@/components/common/SiteHelpChatbot'
 import { toastNotificationService, ToastNotificationPreferences } from '@/services/toastNotificationService'
 import { logoService, CompanyLogos } from '@/services/logoService'
 import { EmailNotificationSettings } from '@/components/settings/EmailNotificationSettings'
+import InvoiceHistorySettings from '@/components/settings/InvoiceHistorySettings'
 // Removed old TOTP hook - using fresh MFA service directly
 
 interface User {
@@ -105,6 +107,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
     ...(user?.role === 'super_user' ? [
       { id: 'api', name: 'API Configuration', icon: KeyIcon },
       { id: 'branding', name: 'Company Branding', icon: PaletteIcon },
+      { id: 'invoices', name: 'Invoice History', icon: DollarSignIcon },
     ] : [])
   ]
 
@@ -1451,6 +1454,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Invoice History - Super Users Only */}
+          {activeTab === 'invoices' && user?.role === 'super_user' && (
+            <InvoiceHistorySettings />
           )}
 
           {/* Audit Logs */}

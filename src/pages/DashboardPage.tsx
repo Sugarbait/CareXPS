@@ -5,6 +5,7 @@ import { DateRangePicker, DateRange, getDateRangeFromSelection } from '@/compone
 import { retellService, currencyService, twilioCostService, chatService } from '@/services'
 import { pdfExportService } from '@/services/pdfExportService'
 import { stripeInvoiceService } from '@/services/stripeInvoiceService'
+import { invoiceHistoryService } from '@/services/invoiceHistoryService'
 import { userSettingsService } from '@/services'
 import { SiteHelpChatbot } from '@/components/common/SiteHelpChatbot'
 import {
@@ -75,6 +76,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
   const [invoiceCustomerEmail, setInvoiceCustomerEmail] = useState('')
   const [invoiceCustomerName, setInvoiceCustomerName] = useState('CareXPS')
   const [invoiceSuccess, setInvoiceSuccess] = useState<string | null>(null)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [lastInvoiceSent, setLastInvoiceSent] = useState<{
+    timestamp: string
+    email: string
+    amount: string
+    generatedBy: string
+  } | null>(() => {
+    // Load last invoice from localStorage
+    try {
+      const saved = localStorage.getItem('last_invoice_sent')
+      return saved ? JSON.parse(saved) : null
+    } catch (error) {
+      console.error('Failed to load last invoice data:', error)
+      return null
+    }
+  })
 
   // SMS Segment caching state (exact copy from SMS page)
   const [fullDataSegmentCache, setFullDataSegmentCache] = useState<Map<string, number>>(new Map())
@@ -1158,9 +1175,28 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
       return
     }
 
+    // Log user profile who triggered invoice generation
+    // Check all possible user name fields
+    const generatedByUser = user?.display_name
+      || user?.name
+      || user?.username
+      || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
+      || user?.email
+      || 'Unknown User'
+
+    console.log('🧾 INVOICE GENERATION TRIGGERED:', {
+      generatedBy: generatedByUser,
+      userObject: user, // Log full user object for debugging
+      customerEmail: invoiceCustomerEmail,
+      customerName: invoiceCustomerName,
+      timestamp: new Date().toISOString(),
+      dateRange: selectedDateRange
+    })
+
     setIsGeneratingInvoice(true)
     setError('')
     setInvoiceSuccess(null)
+    setShowConfirmDialog(false) // Reset confirmation dialog
 
     try {
       // Initialize Stripe service
@@ -1254,9 +1290,85 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
 
           await emailjs.send(serviceId, templateId, emailParams, publicKey)
           console.log('✅ Invoice email sent successfully via EmailJS with PDF download link')
+
+          // Log successful email send with user profile
+          console.log('📧 INVOICE EMAIL SENT:', {
+            invoiceId: invoiceResult.invoiceId,
+            sentTo: invoiceCustomerEmail,
+            sentBy: generatedByUser,
+            timestamp: new Date().toISOString(),
+            amount: `CAD $${(((metrics.totalCost || 0) + (metrics.totalSMSCost || 0)) * 1.45).toFixed(2)}`
+          })
         }
       } catch (emailError) {
         console.warn('Email sending failed, but invoice was created:', emailError)
+      }
+
+      // Save invoice to Supabase (with localStorage fallback)
+      const totalCostCAD = ((metrics.totalCost || 0) + (metrics.totalSMSCost || 0)) * 1.45
+
+      // Calculate date range display with proper formatting
+      let dateRangeDisplay: string
+      if (selectedDateRange === 'custom' && customStartDate && customEndDate) {
+        dateRangeDisplay = `${customStartDate.toLocaleDateString()} - ${customEndDate.toLocaleDateString()}`
+      } else {
+        // Format preset date ranges nicely
+        const { start, end } = getDateRangeFromSelection(selectedDateRange, customStartDate, customEndDate)
+        dateRangeDisplay = `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`
+      }
+
+      try {
+        // Get actual date range for period_start and period_end
+        const { start: periodStart, end: periodEnd } = getDateRangeFromSelection(selectedDateRange, customStartDate, customEndDate)
+
+        const saveResult = await invoiceHistoryService.createInvoice({
+          invoice_id: invoiceResult.invoiceId,
+          customer_email: invoiceCustomerEmail,
+          customer_name: invoiceCustomerName,
+          total_cost_cad: totalCostCAD,
+          call_count: metrics.totalCalls || 0,
+          call_cost_cad: (metrics.totalCost || 0) * 1.45,
+          sms_count: metrics.totalChats || 0,
+          sms_cost_cad: (metrics.totalSMSCost || 0) * 1.45,
+          invoice_url: invoiceResult.invoiceUrl,
+          invoice_status: 'finalized',
+          generated_by: generatedByUser,
+          date_range: dateRangeDisplay,
+          period_start: periodStart,
+          period_end: periodEnd,
+          generated_automatically: false,
+          timestamp: new Date().toISOString(),
+          amount: `CAD $${totalCostCAD.toFixed(2)}`
+        })
+
+        if (saveResult.success) {
+          console.log('✅ Invoice saved to Supabase:', {
+            id: saveResult.data?.id,
+            dateRange: dateRangeDisplay,
+            periodStart: periodStart.toISOString(),
+            periodEnd: periodEnd.toISOString(),
+            generatedBy: generatedByUser
+          })
+        } else {
+          console.warn('⚠️ Failed to save to Supabase, saved to localStorage:', saveResult.error)
+        }
+
+        // Also save as last_invoice_sent for backward compatibility
+        const legacyData = {
+          invoiceId: invoiceResult.invoiceId,
+          timestamp: new Date().toISOString(),
+          email: invoiceCustomerEmail,
+          customerName: invoiceCustomerName,
+          amount: `CAD $${totalCostCAD.toFixed(2)}`,
+          generatedBy: generatedByUser,
+          dateRange: dateRangeDisplay,
+          invoiceUrl: invoiceResult.invoiceUrl
+        }
+        localStorage.setItem('last_invoice_sent', JSON.stringify(legacyData))
+        setLastInvoiceSent(legacyData)
+
+      } catch (storageError) {
+        console.error('Failed to save invoice data:', storageError)
       }
 
       setInvoiceSuccess(`Invoice created successfully! Invoice ID: ${invoiceResult.invoiceId}. Email with PDF download link sent to ${invoiceCustomerEmail}`)
@@ -1368,6 +1480,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
           </button>
         </div>
       </div>
+
       <div className="text-xs text-gray-500 mb-6">
         Last refreshed: {formatLastRefreshTime()} (Auto-refresh every minute)
       </div>
@@ -1746,34 +1859,61 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
                 </div>
               </div>
 
-              {/* Customer Information */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Customer Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={invoiceCustomerName}
-                  onChange={(e) => setInvoiceCustomerName(e.target.value)}
-                  placeholder="Medical Practice Name"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                  disabled={isGeneratingInvoice}
-                />
-              </div>
+              {/* Confirmation Dialog */}
+              {showConfirmDialog ? (
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-600 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircleIcon className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="text-sm font-semibold text-yellow-800 dark:text-yellow-200 mb-2">
+                        Confirm Invoice Generation
+                      </h3>
+                      <div className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
+                        <div><strong>Recipient:</strong> {invoiceCustomerEmail}</div>
+                        <div><strong>Customer:</strong> {invoiceCustomerName}</div>
+                        <div><strong>Amount:</strong> CAD ${(((metrics.totalCost || 0) + (metrics.totalSMSCost || 0)) * 1.45).toFixed(2)}</div>
+                        <div><strong>Period:</strong> {selectedDateRange === 'custom' && customStartDate && customEndDate
+                          ? `${customStartDate.toLocaleDateString()} - ${customEndDate.toLocaleDateString()}`
+                          : selectedDateRange}</div>
+                      </div>
+                      <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-3">
+                        Are you sure you want to generate and send this invoice?
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Customer Information */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Customer Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={invoiceCustomerName}
+                      onChange={(e) => setInvoiceCustomerName(e.target.value)}
+                      placeholder="Medical Practice Name"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                      disabled={isGeneratingInvoice}
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Customer Email <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  value={invoiceCustomerEmail}
-                  onChange={(e) => setInvoiceCustomerEmail(e.target.value)}
-                  placeholder="billing@practice.com"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                  disabled={isGeneratingInvoice}
-                />
-              </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Customer Email <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={invoiceCustomerEmail}
+                      onChange={(e) => setInvoiceCustomerEmail(e.target.value)}
+                      placeholder="billing@practice.com"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                      disabled={isGeneratingInvoice}
+                    />
+                  </div>
+                </>
+              )}
 
               {/* Success Message */}
               {invoiceSuccess && (
@@ -1789,36 +1929,65 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
 
               {/* Action Buttons */}
               <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => {
-                    setShowInvoiceModal(false)
-                    setInvoiceSuccess(null)
-                    setError('')
-                    setInvoiceCustomerEmail('')
-                    setInvoiceCustomerName('CareXPS')
-                  }}
-                  disabled={isGeneratingInvoice}
-                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleGenerateInvoice}
-                  disabled={isGeneratingInvoice || !invoiceCustomerEmail || !invoiceCustomerName}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {isGeneratingInvoice ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Generating...</span>
-                    </>
-                  ) : (
-                    <>
+                {showConfirmDialog ? (
+                  <>
+                    <button
+                      onClick={() => setShowConfirmDialog(false)}
+                      disabled={isGeneratingInvoice}
+                      className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={handleGenerateInvoice}
+                      disabled={isGeneratingInvoice}
+                      className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {isGeneratingInvoice ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Generating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <SendIcon className="w-4 h-4" />
+                          <span>Confirm & Send</span>
+                        </>
+                      )}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        setShowInvoiceModal(false)
+                        setInvoiceSuccess(null)
+                        setError('')
+                        setInvoiceCustomerEmail('')
+                        setInvoiceCustomerName('CareXPS')
+                        setShowConfirmDialog(false)
+                      }}
+                      disabled={isGeneratingInvoice}
+                      className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!invoiceCustomerEmail || !invoiceCustomerName) {
+                          setError('Please fill in all customer information')
+                          return
+                        }
+                        setShowConfirmDialog(true)
+                      }}
+                      disabled={isGeneratingInvoice || !invoiceCustomerEmail || !invoiceCustomerName}
+                      className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
                       <SendIcon className="w-4 h-4" />
                       <span>Generate Invoice</span>
-                    </>
-                  )}
-                </button>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
