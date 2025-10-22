@@ -3,7 +3,6 @@ import { stripeInvoiceService, type InvoiceData } from '@/services/stripeInvoice
 import { DateRangePicker, type DateRange, getDateRangeFromSelection } from '@/components/common/DateRangePicker'
 import {
   CreditCardIcon,
-  MailIcon,
   CalendarIcon,
   DollarSignIcon,
   FileTextIcon,
@@ -23,9 +22,9 @@ export const StripeInvoiceSettings: React.FC<StripeInvoiceSettingsProps> = ({ us
   const [isInitialized, setIsInitialized] = useState(false)
   const [initError, setInitError] = useState('')
 
-  // Customer info
-  const [customerEmail, setCustomerEmail] = useState('')
-  const [customerName, setCustomerName] = useState('')
+  // Customer info - Hard-coded since emails are sent via EmailJS template
+  const customerEmail = 'elmfarrell@yahoo.com'
+  const customerName = 'ELM Farrell'
 
   // Auto-invoice settings
   const [autoInvoiceEnabled, setAutoInvoiceEnabled] = useState(false)
@@ -66,23 +65,10 @@ export const StripeInvoiceSettings: React.FC<StripeInvoiceSettingsProps> = ({ us
             if (supabaseSettings?.stripe_auto_invoice_enabled !== undefined) {
               setAutoInvoiceEnabled(supabaseSettings.stripe_auto_invoice_enabled)
             }
-            if (supabaseSettings?.stripe_customer_email) {
-              setCustomerEmail(supabaseSettings.stripe_customer_email)
-            }
-            if (supabaseSettings?.stripe_customer_name) {
-              setCustomerName(supabaseSettings.stripe_customer_name)
-            }
+            // Customer email/name are now hard-coded, no need to load from settings
           } catch (supabaseError) {
             console.log('Supabase not available, using localStorage fallback')
           }
-        }
-
-        // Set default customer email from user if not already set
-        if (!customerEmail && user?.email) {
-          setCustomerEmail(user.email)
-        }
-        if (!customerName && (user?.name || user?.username)) {
-          setCustomerName(user.name || user.username)
         }
       } catch (error) {
         console.error('Failed to load Stripe settings:', error)
@@ -145,11 +131,6 @@ export const StripeInvoiceSettings: React.FC<StripeInvoiceSettingsProps> = ({ us
 
   // Generate invoice
   const handleGenerateInvoice = async (sendImmediately: boolean = false) => {
-    if (!customerEmail || !customerName) {
-      setGenerationError('Please enter customer email and name')
-      return
-    }
-
     if (!isInitialized) {
       setGenerationError('Stripe not initialized. Please configure API key first.')
       return
@@ -237,11 +218,6 @@ export const StripeInvoiceSettings: React.FC<StripeInvoiceSettingsProps> = ({ us
 
   // Generate automatic monthly invoice
   const handleGenerateMonthlyInvoice = async () => {
-    if (!customerEmail || !customerName) {
-      setGenerationError('Please enter customer email and name')
-      return
-    }
-
     if (!isInitialized) {
       setGenerationError('Stripe not initialized. Please configure API key first.')
       return
@@ -327,43 +303,8 @@ export const StripeInvoiceSettings: React.FC<StripeInvoiceSettingsProps> = ({ us
         )}
       </div>
 
-      {/* Customer Information Section */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <MailIcon className="w-5 h-5 text-blue-600" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Customer Information
-          </h3>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Customer Email
-            </label>
-            <input
-              type="email"
-              value={customerEmail}
-              onChange={(e) => setCustomerEmail(e.target.value)}
-              placeholder="customer@example.com"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Customer Name
-            </label>
-            <input
-              type="text"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="John Doe"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-        </div>
-      </div>
+      {/* Customer Information - Auto-configured */}
+      {/* Email notifications are sent via EmailJS template, so customer info is hard-coded */}
 
       {/* Invoice Generation Section */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
@@ -562,7 +503,7 @@ export const StripeInvoiceSettings: React.FC<StripeInvoiceSettingsProps> = ({ us
                   type="checkbox"
                   checked={autoInvoiceEnabled}
                   onChange={(e) => handleAutoInvoiceToggle(e.target.checked)}
-                  disabled={isSavingAutoInvoice || !isInitialized || !customerEmail || !customerName}
+                  disabled={isSavingAutoInvoice || !isInitialized}
                   className="sr-only peer"
                 />
                 <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all dark:border-gray-600 peer-checked:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"></div>
@@ -570,15 +511,7 @@ export const StripeInvoiceSettings: React.FC<StripeInvoiceSettingsProps> = ({ us
             </div>
           </div>
 
-          {/* Requirements Notice */}
-          {(!customerEmail || !customerName) && (
-            <div className="flex items-center gap-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-600 rounded-lg">
-              <AlertCircleIcon className="w-5 h-5 text-yellow-600" />
-              <span className="text-sm text-yellow-800 dark:text-yellow-200">
-                Please configure customer email and name above to enable automatic invoicing
-              </span>
-            </div>
-          )}
+          {/* Requirements Notice - Removed since customer info is now hard-coded */}
 
           {/* Manual Generate Button */}
           <div className="pt-4 border-t border-gray-200 dark:border-gray-700">

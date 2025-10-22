@@ -73,8 +73,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
   // Invoice modal state
   const [showInvoiceModal, setShowInvoiceModal] = useState(false)
   const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false)
-  const [invoiceCustomerEmail, setInvoiceCustomerEmail] = useState('')
-  const [invoiceCustomerName, setInvoiceCustomerName] = useState('CareXPS')
+  // Customer info hard-coded since emails are sent via EmailJS template
+  const invoiceCustomerEmail = 'elmfarrell@yahoo.com'
+  const invoiceCustomerName = 'ELM Farrell'
   const [invoiceSuccess, setInvoiceSuccess] = useState<string | null>(null)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [lastInvoiceSent, setLastInvoiceSent] = useState<{
@@ -1170,10 +1171,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
   }
 
   const handleGenerateInvoice = async () => {
-    if (!invoiceCustomerEmail || !invoiceCustomerName) {
-      setError('Please fill in all customer information')
-      return
-    }
+    // Customer email/name are now hard-coded (elmfarrell@yahoo.com / ELM Farrell)
 
     // Log user profile who triggered invoice generation
     // Check all possible user name fields
@@ -1377,8 +1375,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
       setTimeout(() => {
         setShowInvoiceModal(false)
         setInvoiceSuccess(null)
-        setInvoiceCustomerEmail('')
-        setInvoiceCustomerName('CareXPS')
       }, 3000)
 
     } catch (error) {
@@ -1837,8 +1833,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
                   setShowInvoiceModal(false)
                   setInvoiceSuccess(null)
                   setError('')
-                  setInvoiceCustomerEmail('')
-                  setInvoiceCustomerName('CareXPS')
                 }}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
               >
@@ -1883,36 +1877,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
                   </div>
                 </div>
               ) : (
-                <>
-                  {/* Customer Information */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Customer Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={invoiceCustomerName}
-                      onChange={(e) => setInvoiceCustomerName(e.target.value)}
-                      placeholder="Medical Practice Name"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                      disabled={isGeneratingInvoice}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Customer Email <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      value={invoiceCustomerEmail}
-                      onChange={(e) => setInvoiceCustomerEmail(e.target.value)}
-                      placeholder="billing@practice.com"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                      disabled={isGeneratingInvoice}
-                    />
-                  </div>
-                </>
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-600 rounded-lg p-4">
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    Invoice will be generated for <strong>{invoiceCustomerName}</strong> ({invoiceCustomerEmail})
+                  </p>
+                  <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
+                    Email notification will be sent via EmailJS template
+                  </p>
+                </div>
               )}
 
               {/* Success Message */}
@@ -1963,8 +1935,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
                         setShowInvoiceModal(false)
                         setInvoiceSuccess(null)
                         setError('')
-                        setInvoiceCustomerEmail('')
-                        setInvoiceCustomerName('CareXPS')
                         setShowConfirmDialog(false)
                       }}
                       disabled={isGeneratingInvoice}
@@ -1974,13 +1944,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
                     </button>
                     <button
                       onClick={() => {
-                        if (!invoiceCustomerEmail || !invoiceCustomerName) {
-                          setError('Please fill in all customer information')
-                          return
-                        }
                         setShowConfirmDialog(true)
                       }}
-                      disabled={isGeneratingInvoice || !invoiceCustomerEmail || !invoiceCustomerName}
+                      disabled={isGeneratingInvoice}
                       className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       <SendIcon className="w-4 h-4" />
