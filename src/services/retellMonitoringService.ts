@@ -1,10 +1,12 @@
 /**
  * Retell AI Monitoring Service
  * Polls Retell AI for new calls/SMS and triggers email notifications
+ * Also syncs new records to Supabase to enable toast notifications
  */
 
 import { retellService } from './retellService'
 import { sendNewCallNotification, sendNewSMSNotification } from './emailNotificationService'
+import { supabase } from '@/config/supabase'
 
 class RetellMonitoringService {
   private isMonitoring = false
@@ -107,7 +109,7 @@ class RetellMonitoringService {
       })
 
       if (newCalls.length > 0) {
-        console.log(`📊 Found ${newCalls.length} new calls, sending email notification`)
+        console.log(`📊 Found ${newCalls.length} new calls, sending email notification and syncing to Supabase`)
 
         // Send email notification
         try {
@@ -115,6 +117,14 @@ class RetellMonitoringService {
           console.log('✅ Email notification sent for new calls')
         } catch (error) {
           console.error('Failed to send call email notification:', error)
+        }
+
+        // Sync to Supabase to enable toast notifications
+        try {
+          await this.syncCallsToSupabase(newCalls)
+          console.log('✅ Synced calls to Supabase for toast notifications')
+        } catch (error) {
+          console.error('Failed to sync calls to Supabase (non-critical):', error)
         }
       }
 
@@ -158,7 +168,7 @@ class RetellMonitoringService {
       })
 
       if (newChats.length > 0) {
-        console.log(`📊 Found ${newChats.length} new chats/SMS, sending email notification`)
+        console.log(`📊 Found ${newChats.length} new chats/SMS, sending email notification and syncing to Supabase`)
 
         // Send email notification
         try {
@@ -166,6 +176,14 @@ class RetellMonitoringService {
           console.log('✅ Email notification sent for new SMS')
         } catch (error) {
           console.error('Failed to send SMS email notification:', error)
+        }
+
+        // Sync to Supabase to enable toast notifications
+        try {
+          await this.syncChatsToSupabase(newChats)
+          console.log('✅ Synced chats to Supabase for toast notifications')
+        } catch (error) {
+          console.error('Failed to sync chats to Supabase (non-critical):', error)
         }
       }
 
@@ -177,6 +195,67 @@ class RetellMonitoringService {
 
     } catch (error) {
       console.error('📊 Error checking new chats:', error)
+    }
+  }
+
+  /**
+   * Sync calls to Supabase to enable toast notifications
+   */
+  private async syncCallsToSupabase(calls: any[]): Promise<void> {
+    if (!calls || calls.length === 0) return
+
+    try {
+      const records = calls.map(call => ({
+        id: call.call_id,
+        call_id: call.call_id,
+        agent_id: call.agent_id || null,
+        start_time: call.start_timestamp || new Date().toISOString(),
+        end_time: call.end_timestamp || null,
+        duration: call.call_analysis?.call_summary?.duration || 0,
+        sentiment: call.call_analysis?.call_summary?.user_sentiment?.toLowerCase() || null,
+        created_at: call.start_timestamp || new Date().toISOString()
+      }))
+
+      const { error } = await supabase
+        .from('calls')
+        .upsert(records, { onConflict: 'id', ignoreDuplicates: true })
+
+      if (error) {
+        console.error('Supabase sync error (non-critical):', error)
+      }
+    } catch (error) {
+      // Non-critical error - don't break email notifications
+      console.error('Failed to sync calls to Supabase:', error)
+    }
+  }
+
+  /**
+   * Sync chats/SMS to Supabase to enable toast notifications
+   */
+  private async syncChatsToSupabase(chats: any[]): Promise<void> {
+    if (!chats || chats.length === 0) return
+
+    try {
+      const records = chats.map(chat => ({
+        id: chat.chat_id,
+        chat_id: chat.chat_id,
+        agent_id: chat.agent_id || null,
+        start_time: chat.start_timestamp || new Date().toISOString(),
+        end_time: chat.end_timestamp || null,
+        sentiment: chat.custom_analysis_data?.user_sentiment?.toLowerCase() || null,
+        created_at: chat.start_timestamp || new Date().toISOString()
+      }))
+
+      const { error } = await supabase
+        .from('sms_messages')
+        .upsert(records, { onConflict: 'id', ignoreDuplicates: true })
+
+      if (error) {
+        console.error('Supabase sync error (non-critical):', error)
+      }
+    } catch (error) {
+      // Non-critical error - don't break email notifications
+      console.error('Failed to sync chats to Supabase:', error)
     }
   }
 
@@ -195,3 +274,10 @@ class RetellMonitoringService {
 // Export singleton instance
 export const retellMonitoringService = new RetellMonitoringService()
 export default retellMonitoringService
+
+// Expose to window for testing (development only)
+if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
+  (window as any).retellMonitoringService = retellMonitoringService
+  console.log('📊 Retell Monitoring Service exposed to window for testing')
+  console.log('  - retellMonitoringService.getStatus()')
+}

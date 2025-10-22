@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { FileText, ExternalLink, Download, Trash2, Calendar, DollarSign, User, Mail, RefreshCw } from 'lucide-react'
+import { FileText, ExternalLink, Download, Trash2, Calendar, DollarSign, User, Mail, RefreshCw, CloudDownload, CheckCircle, XCircle, Clock, XIcon } from 'lucide-react'
 import { invoiceHistoryService, InvoiceHistoryRecord } from '@/services/invoiceHistoryService'
+import { stripeInvoiceService } from '@/services/stripeInvoiceService'
+import { InvoiceDetailModal } from '@/components/common/InvoiceDetailModal'
 
 interface InvoiceRecord extends InvoiceHistoryRecord {
   invoiceId?: string
@@ -13,13 +15,27 @@ interface InvoiceRecord extends InvoiceHistoryRecord {
 const InvoiceHistorySettings: React.FC = () => {
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([])
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceRecord | null>(null)
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
 
   // Load invoice history from Supabase
   useEffect(() => {
     loadInvoiceHistory()
   }, [])
+
+  // Auto-dismiss toast after 5 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null)
+      }, 5000)
+
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
 
   const loadInvoiceHistory = async () => {
     setLoading(true)
@@ -29,8 +45,13 @@ const InvoiceHistorySettings: React.FC = () => {
       const result = await invoiceHistoryService.getInvoices()
 
       if (result.success && result.data) {
+        // Filter to only show invoices for elmfarrell@yahoo.com
+        const filteredData = result.data.filter(invoice =>
+          invoice.customer_email === 'elmfarrell@yahoo.com'
+        )
+
         // Map database records to component format
-        const mappedInvoices = result.data.map(invoice => ({
+        const mappedInvoices = filteredData.map(invoice => ({
           ...invoice,
           invoiceId: invoice.invoice_id,
           timestamp: invoice.generated_at || invoice.created_at || new Date().toISOString(),
@@ -41,8 +62,15 @@ const InvoiceHistorySettings: React.FC = () => {
           customerName: invoice.customer_name
         }))
 
-        setInvoices(mappedInvoices)
-        console.log(`✅ Loaded ${mappedInvoices.length} invoices from Supabase`)
+        // Sort by timestamp descending (newest first)
+        const sortedInvoices = mappedInvoices.sort((a, b) => {
+          const dateA = new Date(a.timestamp).getTime()
+          const dateB = new Date(b.timestamp).getTime()
+          return dateB - dateA // Descending order (newest first)
+        })
+
+        setInvoices(sortedInvoices)
+        console.log(`✅ Loaded ${sortedInvoices.length} invoices from Supabase (filtered for elmfarrell@yahoo.com, sorted newest first)`)
       } else {
         // Don't show error for authentication issues (normal during logout)
         if (result.error && !result.error.includes('authenticated')) {
@@ -77,12 +105,13 @@ const InvoiceHistorySettings: React.FC = () => {
         setInvoices(updatedHistory)
         setSelectedInvoice(null)
         console.log('✅ Invoice deleted:', id)
+        setToast({ message: 'Invoice deleted successfully', type: 'success' })
       } else {
-        alert(`Failed to delete invoice: ${result.error}`)
+        setToast({ message: `Failed to delete invoice: ${result.error}`, type: 'error' })
       }
     } catch (error) {
       console.error('Failed to delete invoice:', error)
-      alert('Failed to delete invoice')
+      setToast({ message: 'Failed to delete invoice', type: 'error' })
     }
   }
 
@@ -98,12 +127,59 @@ const InvoiceHistorySettings: React.FC = () => {
         setInvoices([])
         setSelectedInvoice(null)
         console.log('✅ All invoice history cleared')
+        setToast({ message: 'All invoice history cleared', type: 'success' })
       } else {
-        alert(`Failed to clear invoice history: ${result.error}`)
+        setToast({ message: `Failed to clear invoice history: ${result.error}`, type: 'error' })
       }
     } catch (error) {
       console.error('Failed to clear invoice history:', error)
-      alert('Failed to clear invoice history')
+      setToast({ message: 'Failed to clear invoice history', type: 'error' })
+    }
+  }
+
+  const syncFromStripe = async () => {
+    setSyncing(true)
+    setError(null)
+
+    try {
+      // Initialize Stripe first
+      const initResult = await stripeInvoiceService.initialize()
+
+      if (!initResult.success) {
+        setError(initResult.error || 'Failed to initialize Stripe')
+        return
+      }
+
+      // Fetch invoices from Stripe for elmfarrell@yahoo.com only
+      const fetchResult = await stripeInvoiceService.fetchAllInvoices('elmfarrell@yahoo.com', 100)
+
+      if (!fetchResult.success || !fetchResult.data) {
+        setError(fetchResult.error || 'Failed to fetch invoices from Stripe')
+        return
+      }
+
+      console.log(`📥 Fetched ${fetchResult.data.length} invoices from Stripe for elmfarrell@yahoo.com`)
+
+      // Sync to local database
+      const syncResult = await invoiceHistoryService.syncFromStripe(fetchResult.data)
+
+      if (!syncResult.success) {
+        setError(syncResult.error || 'Failed to sync invoices')
+        return
+      }
+
+      // Reload invoice history
+      await loadInvoiceHistory()
+
+      console.log(`✅ Successfully synced ${syncResult.synced} invoices from Stripe for elmfarrell@yahoo.com`)
+      setToast({ message: `Successfully synced ${syncResult.synced} invoices from Stripe`, type: 'success' })
+    } catch (error) {
+      console.error('Failed to sync from Stripe:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      setError(errorMessage)
+      setToast({ message: `Failed to sync from Stripe: ${errorMessage}`, type: 'error' })
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -123,6 +199,44 @@ const InvoiceHistorySettings: React.FC = () => {
     }
   }
 
+  const getPaymentStatusBadge = (invoice: InvoiceRecord) => {
+    const status = invoice.invoice_status?.toLowerCase()
+    const isPaid = invoice.paid_at || status === 'paid'
+
+    if (isPaid) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 text-xs font-semibold rounded-full">
+          <CheckCircle className="w-3 h-3" />
+          Paid
+        </span>
+      )
+    }
+
+    if (status === 'open' || status === 'sent') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 text-xs font-semibold rounded-full">
+          <Clock className="w-3 h-3" />
+          Unpaid
+        </span>
+      )
+    }
+
+    if (status === 'void' || status === 'uncollectible') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 text-xs font-semibold rounded-full">
+          <XCircle className="w-3 h-3" />
+          {status === 'void' ? 'Void' : 'Uncollectible'}
+        </span>
+      )
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300 text-xs font-semibold rounded-full">
+        {status || 'Draft'}
+      </span>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -130,7 +244,7 @@ const InvoiceHistorySettings: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Invoice History</h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            {loading ? 'Loading invoices from Supabase...' : 'View and manage all generated invoices (synced across devices)'}
+            {loading ? 'Loading invoices from Supabase...' : 'Viewing invoices for elmfarrell@yahoo.com (synced across devices)'}
           </p>
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400 mt-1">
@@ -140,8 +254,17 @@ const InvoiceHistorySettings: React.FC = () => {
         </div>
         <div className="flex gap-2">
           <button
+            onClick={syncFromStripe}
+            disabled={loading || syncing}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+            title="Sync from Stripe"
+          >
+            <CloudDownload className={`w-4 h-4 ${syncing ? 'animate-bounce' : ''}`} />
+            {syncing ? 'Syncing...' : 'Sync from Stripe'}
+          </button>
+          <button
             onClick={loadInvoiceHistory}
-            disabled={loading}
+            disabled={loading || syncing}
             className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
             title="Refresh from Supabase"
           >
@@ -150,7 +273,7 @@ const InvoiceHistorySettings: React.FC = () => {
           </button>
           <button
             onClick={exportHistory}
-            disabled={invoices.length === 0 || loading}
+            disabled={invoices.length === 0 || loading || syncing}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <Download className="w-4 h-4" />
@@ -158,7 +281,7 @@ const InvoiceHistorySettings: React.FC = () => {
           </button>
           <button
             onClick={clearAllHistory}
-            disabled={invoices.length === 0 || loading}
+            disabled={invoices.length === 0 || loading || syncing}
             className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <Trash2 className="w-4 h-4" />
@@ -207,7 +330,7 @@ const InvoiceHistorySettings: React.FC = () => {
                   ? new Date(invoices[0].timestamp).toLocaleDateString()
                   : 'N/A'}
               </div>
-              <div className="text-xs text-purple-700 dark:text-purple-300">Last Invoice</div>
+              <div className="text-xs text-purple-700 dark:text-purple-300">Latest Invoice</div>
             </div>
           </div>
         </div>
@@ -217,9 +340,9 @@ const InvoiceHistorySettings: React.FC = () => {
       {invoices.length === 0 ? (
         <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-12 text-center">
           <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Invoices Yet</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Invoices Found</h3>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Generated invoices will appear here. Create your first invoice from the Dashboard.
+            No invoices found for elmfarrell@yahoo.com. Click "Sync from Stripe" to fetch invoices from your Stripe account.
           </p>
         </div>
       ) : (
@@ -238,10 +361,10 @@ const InvoiceHistorySettings: React.FC = () => {
                     Amount
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                    Period
+                    Status
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                    Generated By
+                    Period
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                     Actions
@@ -253,7 +376,10 @@ const InvoiceHistorySettings: React.FC = () => {
                   <tr
                     key={invoice.invoiceId}
                     className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
-                    onClick={() => setSelectedInvoice(selectedInvoice?.invoiceId === invoice.invoiceId ? null : invoice)}
+                    onClick={() => {
+                      setSelectedInvoice(invoice)
+                      setIsDetailModalOpen(true)
+                    }}
                   >
                     <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                       {new Date(invoice.timestamp).toLocaleString()}
@@ -269,11 +395,11 @@ const InvoiceHistorySettings: React.FC = () => {
                     <td className="px-4 py-3 text-sm font-semibold text-green-600 dark:text-green-400">
                       {invoice.amount}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                      {invoice.dateRange}
+                    <td className="px-4 py-3">
+                      {getPaymentStatusBadge(invoice)}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                      {invoice.generatedBy}
+                      {invoice.dateRange}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -309,84 +435,42 @@ const InvoiceHistorySettings: React.FC = () => {
         </div>
       )}
 
-      {/* Invoice Details Panel */}
+      {/* Invoice Detail Modal */}
       {selectedInvoice && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-600 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-4 flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            Invoice Details
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs text-blue-700 dark:text-blue-300 mb-1">Invoice ID</div>
-              <div className="text-sm font-mono text-blue-900 dark:text-blue-100 break-all">
-                {selectedInvoice.invoiceId}
-              </div>
+        <InvoiceDetailModal
+          invoice={selectedInvoice}
+          isOpen={isDetailModalOpen}
+          onClose={() => {
+            setIsDetailModalOpen(false)
+            setSelectedInvoice(null)
+          }}
+        />
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50 transition-all duration-300 ease-in-out">
+          <div
+            className={`flex items-center gap-3 px-6 py-4 rounded-lg shadow-lg border-l-4 ${
+              toast.type === 'success'
+                ? 'bg-green-50 dark:bg-green-900/20 border-green-500 text-green-800 dark:text-green-300'
+                : toast.type === 'error'
+                ? 'bg-red-50 dark:bg-red-900/20 border-red-500 text-red-800 dark:text-red-300'
+                : 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-800 dark:text-blue-300'
+            }`}
+          >
+            <div className="flex-shrink-0">
+              {toast.type === 'success' && <CheckCircle className="w-6 h-6" />}
+              {toast.type === 'error' && <XCircle className="w-6 h-6" />}
+              {toast.type === 'info' && <FileText className="w-6 h-6" />}
             </div>
-            <div>
-              <div className="text-xs text-blue-700 dark:text-blue-300 mb-1">Generated</div>
-              <div className="text-sm text-blue-900 dark:text-blue-100">
-                {new Date(selectedInvoice.timestamp).toLocaleString()}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-blue-700 dark:text-blue-300 mb-1 flex items-center gap-1">
-                <User className="w-3 h-3" />
-                Customer Name
-              </div>
-              <div className="text-sm text-blue-900 dark:text-blue-100">
-                {selectedInvoice.customerName}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-blue-700 dark:text-blue-300 mb-1 flex items-center gap-1">
-                <Mail className="w-3 h-3" />
-                Customer Email
-              </div>
-              <div className="text-sm text-blue-900 dark:text-blue-100">
-                {selectedInvoice.email}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-blue-700 dark:text-blue-300 mb-1 flex items-center gap-1">
-                <DollarSign className="w-3 h-3" />
-                Amount
-              </div>
-              <div className="text-sm font-semibold text-blue-900 dark:text-blue-100">
-                {selectedInvoice.amount}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-blue-700 dark:text-blue-300 mb-1 flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                Billing Period
-              </div>
-              <div className="text-sm text-blue-900 dark:text-blue-100">
-                {selectedInvoice.dateRange}
-              </div>
-            </div>
-            <div className="md:col-span-2">
-              <div className="text-xs text-blue-700 dark:text-blue-300 mb-1 flex items-center gap-1">
-                <User className="w-3 h-3" />
-                Generated By
-              </div>
-              <div className="text-sm text-blue-900 dark:text-blue-100">
-                {selectedInvoice.generatedBy}
-              </div>
-            </div>
-            {selectedInvoice.invoiceUrl && (
-              <div className="md:col-span-2">
-                <a
-                  href={selectedInvoice.invoiceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  View Invoice in Stripe
-                </a>
-              </div>
-            )}
+            <div className="flex-1 font-medium">{toast.message}</div>
+            <button
+              onClick={() => setToast(null)}
+              className="flex-shrink-0 p-1 hover:bg-black/10 dark:hover:bg-white/10 rounded transition-colors"
+            >
+              <XIcon className="w-5 h-5" />
+            </button>
           </div>
         </div>
       )}

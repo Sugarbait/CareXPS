@@ -213,17 +213,36 @@ export class CloudCredentialService {
         }
       }
 
-      // Upsert user credentials
-      const { error } = await supabase
+      // Try to update existing record first (manual upsert to handle partial unique index)
+      const { data: existing } = await supabase
         .from('system_credentials')
-        .upsert([credentialRecord], {
-          onConflict: 'user_id,credential_type',
-          ignoreDuplicates: false
-        })
+        .select('id')
+        .eq('credential_type', 'user_override')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .single()
 
-      if (error) throw error
+      if (existing) {
+        // Update existing record
+        const { error } = await supabase
+          .from('system_credentials')
+          .update({
+            ...credentialRecord,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existing.id)
 
-      console.log('📁 CloudCredentialService: Stored user credentials in cloud for:', userId)
+        if (error) throw error
+        console.log('📁 CloudCredentialService: Updated existing user credentials in cloud for:', userId)
+      } else {
+        // Insert new record
+        const { error } = await supabase
+          .from('system_credentials')
+          .insert([credentialRecord])
+
+        if (error) throw error
+        console.log('📁 CloudCredentialService: Stored new user credentials in cloud for:', userId)
+      }
     } catch (error) {
       console.error('❌ CloudCredentialService: Failed to store user credentials:', error)
       throw error

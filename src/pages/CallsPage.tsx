@@ -401,15 +401,7 @@ export const CallsPage: React.FC<CallsPageProps> = ({ user }) => {
       // Update previous calls reference
       previousCallsRef.current = [...transformedCalls]
 
-      // Fetch notes count for all calls
-      try {
-        const callIds = transformedCalls.map(call => call.call_id)
-        const notesCountData = await notesService.getNotesCount(callIds, 'call')
-        setNotesCount(notesCountData)
-      } catch (notesError) {
-        safeError('Error fetching notes count:', notesError)
-        // Don't fail the whole operation if notes fetch fails
-      }
+      // Note: Notes count is automatically handled by useNotesCount hook
 
       // Calculate base metrics using ALL calls for accurate totals
       const baseMetrics = retellService.calculateCallMetrics(totalCalls)

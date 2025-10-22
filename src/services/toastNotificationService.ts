@@ -648,3 +648,12 @@ class ToastNotificationService {
 // Export singleton instance
 export const toastNotificationService = new ToastNotificationService()
 export default toastNotificationService
+
+// Expose to window for testing (development only)
+if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
+  (window as any).toastNotificationService = toastNotificationService
+  console.log('🔔 Toast Notification Service exposed to window for testing')
+  console.log('  - toastNotificationService.triggerTestNotification("call")')
+  console.log('  - toastNotificationService.triggerTestNotification("sms")')
+  console.log('  - toastNotificationService.getDebugInfo()')
+}

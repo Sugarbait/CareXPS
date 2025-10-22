@@ -509,6 +509,137 @@ class InvoiceHistoryService {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   }
+
+  /**
+   * Sync invoices from Stripe to local database
+   * This fetches all invoices from Stripe and updates the local invoice_history table
+   */
+  async syncFromStripe(stripeInvoices: Array<{
+    id: string
+    customer_id: string
+    customer_email: string
+    customer_name: string
+    amount_due: number
+    amount_paid: number
+    amount_remaining: number
+    currency: string
+    status: string
+    paid: boolean
+    created: number
+    due_date: number | null
+    hosted_invoice_url: string | null
+    period_start: number
+    period_end: number
+    description: string | null
+  }>): Promise<{
+    success: boolean
+    synced?: number
+    error?: string
+  }> {
+    try {
+      let syncedCount = 0
+
+      for (const stripeInvoice of stripeInvoices) {
+        // Check if invoice already exists
+        const existingResult = await this.getInvoiceByStripeId(stripeInvoice.id)
+
+        const invoiceData: InvoiceHistoryRecord = {
+          invoice_id: stripeInvoice.id,
+          customer_id: stripeInvoice.customer_id,
+          customer_email: stripeInvoice.customer_email,
+          customer_name: stripeInvoice.customer_name || 'Unknown',
+          period_start: new Date(stripeInvoice.period_start * 1000),
+          period_end: new Date(stripeInvoice.period_end * 1000),
+          invoice_month: new Date(stripeInvoice.created * 1000).toISOString().slice(0, 7),
+          total_cost_cad: stripeInvoice.amount_due,
+          invoice_status: stripeInvoice.status,
+          invoice_url: stripeInvoice.hosted_invoice_url || undefined,
+          generated_at: new Date(stripeInvoice.created * 1000),
+          paid_at: stripeInvoice.paid ? new Date(stripeInvoice.created * 1000) : undefined,
+          generated_automatically: false
+        }
+
+        if (existingResult.success && existingResult.data) {
+          // Update existing invoice
+          await this.updateInvoiceStatus(
+            existingResult.data.id!,
+            stripeInvoice.status,
+            {
+              paid_at: stripeInvoice.paid ? new Date(stripeInvoice.created * 1000) : undefined,
+              invoice_url: stripeInvoice.hosted_invoice_url || undefined
+            }
+          )
+          syncedCount++
+        } else {
+          // Create new invoice record
+          const result = await this.createInvoice(invoiceData)
+          if (result.success) {
+            syncedCount++
+          }
+        }
+      }
+
+      console.log(`✅ Synced ${syncedCount} invoices from Stripe`)
+
+      return {
+        success: true,
+        synced: syncedCount
+      }
+    } catch (error) {
+      console.error('Failed to sync invoices from Stripe:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  /**
+   * Get invoice by Stripe invoice ID
+   */
+  private async getInvoiceByStripeId(invoiceId: string): Promise<{
+    success: boolean
+    data?: InvoiceHistoryRecord
+    error?: string
+  }> {
+    try {
+      if (!supabase) {
+        return this.getInvoiceByIdLocally(invoiceId)
+      }
+
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
+        return this.getInvoiceByIdLocally(invoiceId)
+      }
+
+      const { data, error } = await supabase
+        .from(this.TABLE_NAME)
+        .select('*')
+        .eq('invoice_id', invoiceId)
+        .eq('user_id', user.id)
+        .single()
+
+      if (error) {
+        // Not found is okay
+        if (error.code === 'PGRST116') {
+          return {
+            success: false,
+            error: 'Not found'
+          }
+        }
+        console.error('Failed to fetch invoice by Stripe ID:', error)
+        return this.getInvoiceByIdLocally(invoiceId)
+      }
+
+      return {
+        success: true,
+        data
+      }
+    } catch (error) {
+      return this.getInvoiceByIdLocally(invoiceId)
+    }
+  }
 }
 
 // Export singleton instance

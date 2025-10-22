@@ -162,7 +162,7 @@ export const EmailNotificationSettings: React.FC<EmailNotificationSettingsProps>
 
       try {
         // Call Supabase Edge Function directly
-        const response = await fetch('https://cpkslvmydfdevdftieck.supabase.co/functions/v1/send-email-notification', {
+        const response = await fetch('https://anifqpihbnuuciqxddqi.supabase.co/functions/v1/send-email-notification', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

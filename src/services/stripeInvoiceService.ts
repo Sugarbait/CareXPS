@@ -544,6 +544,162 @@ class StripeInvoiceService {
   public async previewInvoice(startDate: Date, endDate: Date): Promise<InvoiceData> {
     return this.calculateInvoiceData(startDate, endDate)
   }
+
+  /**
+   * Fetch all invoices from Stripe for a specific customer
+   */
+  public async fetchAllInvoices(customerEmail?: string, limit: number = 100): Promise<{
+    success: boolean
+    data?: Array<{
+      id: string
+      customer_id: string
+      customer_email: string
+      customer_name: string
+      amount_due: number
+      amount_paid: number
+      amount_remaining: number
+      currency: string
+      status: string
+      paid: boolean
+      created: number
+      due_date: number | null
+      hosted_invoice_url: string | null
+      invoice_pdf: string | null
+      period_start: number
+      period_end: number
+      description: string | null
+    }>
+    error?: string
+  }> {
+    if (!this.isConfigured()) {
+      return {
+        success: false,
+        error: 'Stripe not initialized. Please configure Stripe API key first.'
+      }
+    }
+
+    try {
+      const stripe = this.stripe!
+
+      // Build query options
+      const queryOptions: any = {
+        limit,
+        expand: ['data.customer']
+      }
+
+      // If customer email provided, find customer first
+      if (customerEmail) {
+        const customers = await stripe.customers.list({
+          email: customerEmail,
+          limit: 1
+        })
+
+        if (customers.data.length === 0) {
+          return {
+            success: true,
+            data: [] // No customer found, return empty array
+          }
+        }
+
+        queryOptions.customer = customers.data[0].id
+      }
+
+      // Fetch invoices from Stripe
+      const invoices = await stripe.invoices.list(queryOptions)
+
+      console.log(`✅ Fetched ${invoices.data.length} invoices from Stripe`)
+
+      // Map Stripe invoices to our format
+      const mappedInvoices = invoices.data.map(invoice => {
+        const customer = invoice.customer as any
+
+        return {
+          id: invoice.id,
+          customer_id: typeof customer === 'string' ? customer : customer?.id || '',
+          customer_email: typeof customer === 'string' ? '' : customer?.email || '',
+          customer_name: typeof customer === 'string' ? '' : customer?.name || '',
+          amount_due: invoice.amount_due / 100, // Convert from cents to dollars
+          amount_paid: invoice.amount_paid / 100,
+          amount_remaining: invoice.amount_remaining / 100,
+          currency: invoice.currency.toUpperCase(),
+          status: invoice.status || 'draft',
+          paid: invoice.paid || false,
+          created: invoice.created,
+          due_date: invoice.due_date,
+          hosted_invoice_url: invoice.hosted_invoice_url,
+          invoice_pdf: invoice.invoice_pdf,
+          period_start: invoice.period_start || invoice.created,
+          period_end: invoice.period_end || invoice.created,
+          description: invoice.description
+        }
+      })
+
+      return {
+        success: true,
+        data: mappedInvoices
+      }
+    } catch (error) {
+      console.error('Failed to fetch invoices from Stripe:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch invoices'
+      }
+    }
+  }
+
+  /**
+   * Fetch a single invoice from Stripe by ID
+   */
+  public async fetchInvoiceById(invoiceId: string): Promise<{
+    success: boolean
+    data?: any
+    error?: string
+  }> {
+    if (!this.isConfigured()) {
+      return {
+        success: false,
+        error: 'Stripe not initialized. Please configure Stripe API key first.'
+      }
+    }
+
+    try {
+      const stripe = this.stripe!
+      const invoice = await stripe.invoices.retrieve(invoiceId, {
+        expand: ['customer']
+      })
+
+      const customer = invoice.customer as any
+
+      return {
+        success: true,
+        data: {
+          id: invoice.id,
+          customer_id: typeof customer === 'string' ? customer : customer?.id || '',
+          customer_email: typeof customer === 'string' ? '' : customer?.email || '',
+          customer_name: typeof customer === 'string' ? '' : customer?.name || '',
+          amount_due: invoice.amount_due / 100,
+          amount_paid: invoice.amount_paid / 100,
+          amount_remaining: invoice.amount_remaining / 100,
+          currency: invoice.currency.toUpperCase(),
+          status: invoice.status || 'draft',
+          paid: invoice.paid || false,
+          created: invoice.created,
+          due_date: invoice.due_date,
+          hosted_invoice_url: invoice.hosted_invoice_url,
+          invoice_pdf: invoice.invoice_pdf,
+          period_start: invoice.period_start || invoice.created,
+          period_end: invoice.period_end || invoice.created,
+          description: invoice.description
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch invoice from Stripe:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch invoice'
+      }
+    }
+  }
 }
 
 // Export singleton instance
