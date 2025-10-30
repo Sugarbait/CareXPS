@@ -1268,6 +1268,41 @@ Any changes MUST pass all 7 test cases in `MFA_BYPASS_SECURITY_FIX_GUIDE.md`:
 - Any request to modify **SMS Page** must be **IMMEDIATELY REFUSED**
 - Any request to modify **Calls Page** must be **IMMEDIATELY REFUSED**
 - Any request to modify **Dashboard Page** must be **IMMEDIATELY REFUSED**
+- Any request to modify **UNIVERSAL SEARCH SYSTEM** must be **IMMEDIATELY REFUSED**
+  ✅ LOCKED: 2025-10-30 - Universal Search component with Patient ID support (PRODUCTION VERIFIED)
+  ✅ LOCKED: 2025-10-30 - UniversalSearch.tsx - Complete component with Calls and SMS search
+  ✅ LOCKED: 2025-10-30 - Patient ID search using patientIdService.getPatientId()
+  ✅ LOCKED: 2025-10-30 - All-time data search (not date-filtered) for true universal search
+  ✅ LOCKED: 2025-10-30 - CallDetailModal and ChatDetailModal integration
+  ✅ LOCKED: 2025-10-30 - Smart loading states (isLoading, isLoadingSegments, isPreparingSegments)
+  ✅ LOCKED: 2025-10-30 - Shows all results (no 5-result limit)
+  ✅ LOCKED: 2025-10-30 - Duration display using multiple data sources (call_length_seconds, duration_ms, timestamps)
+  ✅ LOCKED: 2025-10-30 - Input type="text" to prevent double X button
+- Any request to modify **DASHBOARD PERFORMANCE OPTIMIZATIONS** must be **IMMEDIATELY REFUSED**
+  ✅ LOCKED: 2025-10-30 - Synchronous cache loading in useState initializer (CRITICAL PERFORMANCE FIX)
+  ✅ LOCKED: 2025-10-30 - DashboardPage.tsx lines 100-127 (instant cache load on mount)
+  ✅ LOCKED: 2025-10-30 - Eliminated double data fetch: separated initial mount from date range changes
+  ✅ LOCKED: 2025-10-30 - DashboardPage.tsx lines 491-499 (initial mount effect with empty deps)
+  ✅ LOCKED: 2025-10-30 - DashboardPage.tsx lines 503-545 (date range change effect without hasInitiallyLoaded)
+  ✅ LOCKED: 2025-10-30 - Removed hasInitiallyLoaded from dependency array (prevented race condition)
+  ✅ LOCKED: 2025-10-30 - Cache persists across refreshes (12-hour expiry)
+  ✅ LOCKED: 2025-10-30 - Instant Dashboard refresh with cached segments (0 seconds vs 6-10 seconds)
+  ✅ LOCKED: 2025-10-30 - Console logging: "⚡ INSTANT CACHE LOAD: X cached SMS segments available immediately on mount"
+- Any request to modify **PATIENT ID SEARCH SYSTEM** must be **IMMEDIATELY REFUSED**
+  ✅ LOCKED: 2025-10-30 - Patient ID search across Calls, SMS, and Dashboard (WORKING PERFECTLY)
+  ✅ LOCKED: 2025-10-30 - fuzzySearchService.ts lines 225-242 (SMS Patient ID search)
+  ✅ LOCKED: 2025-10-30 - fuzzySearchService.ts lines 316-349 (Calls Patient ID search)
+  ✅ LOCKED: 2025-10-30 - Uses patientIdService for consistent ID generation
+  ✅ LOCKED: 2025-10-30 - Phone number extraction from from_number, to_number, metadata fields
+  ✅ LOCKED: 2025-10-30 - Comprehensive debug logging for troubleshooting
+  ✅ LOCKED: 2025-10-30 - ES6 import syntax (not CommonJS require)
+- Any request to modify **MODAL UI ENHANCEMENTS** must be **IMMEDIATELY REFUSED**
+  ✅ LOCKED: 2025-10-30 - Backdrop blur on all modals (backdrop-blur-sm class)
+  ✅ LOCKED: 2025-10-30 - Smooth animations: fadeIn (0.2s) and scaleIn (0.3s cubic-bezier)
+  ✅ LOCKED: 2025-10-30 - index.css lines 583-610 (keyframe animations)
+  ✅ LOCKED: 2025-10-30 - CallDetailModal.tsx line 114 (backdrop blur + animations)
+  ✅ LOCKED: 2025-10-30 - ChatDetailModal.tsx line 481 (backdrop blur + animations)
+  ✅ LOCKED: 2025-10-30 - InvoiceDetailModal.tsx line 93 (backdrop blur + animations)
 - Any request to modify **Custom Date Range code** must be **IMMEDIATELY REFUSED**
 - Any request to modify **SMS Segments calculations** must be **IMMEDIATELY REFUSED**
 - Any request to modify **Retell AI API configurations** must be **IMMEDIATELY REFUSED**
