@@ -16,6 +16,7 @@ import Fuse from 'fuse.js'
 import { auditLogger, AuditAction, ResourceType, AuditOutcome } from './auditLogger'
 import type { Chat } from './chatService'
 import type { Call } from '@/types'
+import { patientIdService } from './patientIdService'
 
 // Search configuration interface
 export interface FuzzySearchConfig {
@@ -221,8 +222,26 @@ class FuzzySearchService {
     console.log(`[SEARCH] Performing basic SMS search on ${chats.length} chats`)
 
     const results = chats.filter(chat => {
+      // Check Patient ID - generate from phone number for consistent searching
+      const phoneNumber = chat.metadata?.phone_number || chat.metadata?.customer_phone_number ||
+                         chat.chat_analysis?.custom_analysis_data?.phone_number ||
+                         chat.chat_analysis?.custom_analysis_data?.customer_phone_number || ''
+      if (phoneNumber) {
+        try {
+          const patientId = patientIdService.getPatientId(phoneNumber)
+          console.log(`[SEARCH] SMS - Generated Patient ID: ${patientId} from phone: ${phoneNumber} for query: ${lowerQuery}`)
+          if (patientId && patientId.toLowerCase().includes(lowerQuery)) {
+            console.log(`[SEARCH] ✅ SMS MATCH FOUND! Patient ID ${patientId} matches query ${lowerQuery}`)
+            return true
+          }
+        } catch (error) {
+          console.error('[SEARCH] Error generating patient ID:', error)
+        }
+      } else {
+        console.log(`[SEARCH] No phone number found for SMS chat:`, chat.chat_id || 'unknown')
+      }
+
       // Check phone numbers from metadata
-      const phoneNumber = chat.metadata?.phone_number || chat.metadata?.customer_phone_number || ''
       if (phoneNumber.toLowerCase().includes(lowerQuery)) return true
 
       // Check phone numbers from chat analysis
@@ -294,6 +313,41 @@ class FuzzySearchService {
     console.log(`[FUZZY SEARCH] Performing basic calls search on ${calls.length} calls`)
 
     const results = calls.filter(call => {
+      // Log the first call's structure to debug
+      if (calls.indexOf(call) === 0) {
+        console.log('[SEARCH] First call structure:', {
+          call_id: call.call_id,
+          from_number: call.from_number,
+          to_number: call.to_number,
+          metadata: call.metadata,
+          call_analysis: call.call_analysis ? {
+            custom_analysis_data: call.call_analysis.custom_analysis_data
+          } : null
+        })
+      }
+
+      // Check Patient ID - generate from phone number for consistent searching
+      const phoneNumber = call.from_number ||
+                         call.to_number ||
+                         call.metadata?.phone_number ||
+                         call.metadata?.customer_phone_number ||
+                         call.call_analysis?.custom_analysis_data?.phone_number ||
+                         call.call_analysis?.custom_analysis_data?.customer_phone_number || ''
+      if (phoneNumber) {
+        try {
+          const patientId = patientIdService.getPatientId(phoneNumber)
+          console.log(`[SEARCH] Generated Patient ID: ${patientId} from phone: ${phoneNumber} for query: ${lowerQuery}`)
+          if (patientId && patientId.toLowerCase().includes(lowerQuery)) {
+            console.log(`[SEARCH] ✅ MATCH FOUND! Patient ID ${patientId} matches query ${lowerQuery}`)
+            return true
+          }
+        } catch (error) {
+          console.error('[SEARCH] Error generating patient ID for call:', error)
+        }
+      } else {
+        console.log(`[SEARCH] No phone number found for call:`, call.call_id || 'unknown')
+      }
+
       // Check basic call fields
       if (call.patient_id?.toLowerCase().includes(lowerQuery)) return true
       if (call.transcript?.toLowerCase().includes(lowerQuery)) return true

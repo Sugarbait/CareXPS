@@ -8,6 +8,7 @@ import { stripeInvoiceService } from '@/services/stripeInvoiceService'
 import { invoiceHistoryService } from '@/services/invoiceHistoryService'
 import { userSettingsService } from '@/services'
 import { SiteHelpChatbot } from '@/components/common/SiteHelpChatbot'
+import { UniversalSearch } from '@/components/dashboard/UniversalSearch'
 import {
   PhoneIcon,
   MessageSquareIcon,
@@ -95,7 +96,35 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
   })
 
   // SMS Segment caching state (exact copy from SMS page)
-  const [fullDataSegmentCache, setFullDataSegmentCache] = useState<Map<string, number>>(new Map())
+  // Initialize with cached data from localStorage for instant availability
+  const [fullDataSegmentCache, setFullDataSegmentCache] = useState<Map<string, number>>(() => {
+    try {
+      const cached = localStorage.getItem(SMS_SEGMENT_CACHE_KEY)
+      if (!cached) return new Map()
+
+      const cacheData: SegmentCache = JSON.parse(cached)
+      const now = Date.now()
+      const expiryTime = CACHE_EXPIRY_HOURS * 60 * 60 * 1000
+
+      // Check if cache is expired
+      if (now - cacheData.lastUpdated > expiryTime) {
+        console.log('📅 SMS segment cache expired on mount, starting fresh')
+        localStorage.removeItem(SMS_SEGMENT_CACHE_KEY)
+        return new Map()
+      }
+
+      // Filter out expired individual entries and convert to Map
+      const validEntries = cacheData.data.filter(entry => {
+        return now - entry.timestamp < expiryTime
+      })
+
+      console.log(`⚡ INSTANT CACHE LOAD: ${validEntries.length} cached SMS segments available immediately on mount`)
+      return new Map(validEntries.map(entry => [entry.chatId, entry.segments]))
+    } catch (error) {
+      console.error('Failed to load SMS segment cache on mount:', error)
+      return new Map()
+    }
+  })
   const [segmentCache, setSegmentCache] = useState<Map<string, number>>(new Map())
   const [loadingFullChats, setLoadingFullChats] = useState<Set<string>>(new Set())
   const [segmentUpdateTrigger, setSegmentUpdateTrigger] = useState(0)
@@ -105,6 +134,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
 
   // Progress tracking states (copied from SMS page for accurate segment loading)
   const [isLoadingSegments, setIsLoadingSegments] = useState(false)
+  const [isPreparingSegments, setIsPreparingSegments] = useState(false)
   const [segmentLoadingProgress, setSegmentLoadingProgress] = useState({ completed: 0, total: 0 })
   const [segmentLoadingComplete, setSegmentLoadingComplete] = useState(false)
 
@@ -203,35 +233,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
   })
   const [retellStatus, setRetellStatus] = useState<'checking' | 'connected' | 'error' | 'not-configured'>('checking')
 
-  // Load segment cache from localStorage (shared with SMS page)
-  const loadSegmentCache = (): Map<string, number> => {
-    try {
-      const cached = localStorage.getItem(SMS_SEGMENT_CACHE_KEY)
-      if (!cached) return new Map()
-
-      const cacheData: SegmentCache = JSON.parse(cached)
-      const now = Date.now()
-      const expiryTime = CACHE_EXPIRY_HOURS * 60 * 60 * 1000
-
-      // Check if cache is expired
-      if (now - cacheData.lastUpdated > expiryTime) {
-        console.log('📅 SMS segment cache expired, clearing old data')
-        localStorage.removeItem(SMS_SEGMENT_CACHE_KEY)
-        return new Map()
-      }
-
-      // Filter out expired individual entries and convert to Map
-      const validEntries = cacheData.data.filter(entry => {
-        return now - entry.timestamp < expiryTime
-      })
-
-      console.log(`💾 Loaded ${validEntries.length} cached SMS segment calculations`)
-      return new Map(validEntries.map(entry => [entry.chatId, entry.segments]))
-    } catch (error) {
-      console.error('Failed to load SMS segment cache:', error)
-      return new Map()
-    }
-  }
+  // State for Universal Search
+  // Store ALL chats/calls (agent-filtered only, not date-filtered) for true universal search
+  const [dashboardCalls, setDashboardCalls] = useState<any[]>([])
+  const [dashboardChats, setDashboardChats] = useState<any[]>([])
+  const [allDashboardCalls, setAllDashboardCalls] = useState<any[]>([])
+  const [allDashboardChats, setAllDashboardChats] = useState<any[]>([])
 
   // Save segment cache to localStorage (shared with SMS page)
   const saveSegmentCache = useCallback((cache: Map<string, number>) => {
@@ -251,13 +258,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
     } catch (error) {
       console.error('Failed to save SMS segment cache:', error)
     }
-  }, [])
-
-  // Initialize cache loading state
-  useEffect(() => {
-    const cachedSegments = loadSegmentCache()
-    setFullDataSegmentCache(cachedSegments)
-    console.log(`📁 Dashboard loaded ${cachedSegments.size} cached segments from localStorage`)
   }, [])
 
   // Save cache when it changes
@@ -479,13 +479,21 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
     }
   }
 
+  // Initial data fetch on mount only - separate from date range changes
+  useEffect(() => {
+    if (!hasInitiallyLoaded) {
+      console.log('📁 Dashboard: Initial mount - fetching data for the first time')
+      setHasInitiallyLoaded(true)
+      setLastDateRange(selectedDateRange)
+      fetchDashboardData()
+    }
+  }, []) // Empty deps - runs once on mount
+
   // Smart cache management for date range changes (exact copy from SMS page)
   // Only clear cache if the date range actually changed (not initial mount)
   useEffect(() => {
-    // Skip clearing cache on initial mount - preserve loaded cache
+    // Skip on initial mount - already handled by the effect above
     if (!hasInitiallyLoaded) {
-      setHasInitiallyLoaded(true)
-      setLastDateRange(selectedDateRange)
       return
     }
 
@@ -521,16 +529,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
       setLoadingFullChats(new Set()) // Clear loading state for new date range
       setSegmentUpdateTrigger(0) // Reset segment update trigger
       console.log('📅 Dashboard date range changed, cleared non-persistent caches and reset state')
-    }
 
-    // Always fetch data when dependencies change
-    console.log('📅 Dashboard fetching data due to date range change', {
-      selectedDateRange,
-      customStartDate: customStartDate?.toISOString(),
-      customEndDate: customEndDate?.toISOString()
-    })
-    fetchDashboardData()
-  }, [selectedDateRange, customStartDate, customEndDate, hasInitiallyLoaded])
+      // Fetch data for new date range
+      fetchDashboardData()
+    }
+  }, [selectedDateRange, customStartDate, customEndDate]) // Removed hasInitiallyLoaded from deps
 
   // Listen for API configuration events from AuthContext
   useEffect(() => {
@@ -779,13 +782,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
       // For full date range coverage, always auto-load if there are uncached chats
       if (chatsToProcess.length >= 2) {
         console.log(`🚀 Dashboard: Auto-triggering bulk load for ${chatsToProcess.length} uncached chats`)
+        setIsPreparingSegments(true)
         const timer = setTimeout(() => {
+          setIsPreparingSegments(false)
           loadAccurateSegmentsForAllChats()
         }, 1000)
-        return () => clearTimeout(timer)
+        return () => {
+          clearTimeout(timer)
+          setIsPreparingSegments(false)
+        }
       }
     } else {
       console.log(`💾 All ${allFilteredChats.length} chats already cached - no bulk loading needed!`)
+      setIsPreparingSegments(false)
     }
   }, [allFilteredChats, fullDataSegmentCache, hasInitiallyLoaded, loadAccurateSegmentsForAllChats])
 
@@ -869,8 +878,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
         (async () => {
           try {
             // First get ALL calls to understand the data
-            const allCalls = await retellService.getAllCalls()
-            console.log(`Total calls in system: ${allCalls.length}`)
+            const allCallsRaw = await retellService.getAllCalls()
+            console.log(`Total calls in system: ${allCallsRaw.length}`)
+
+            // CRITICAL: Filter by CareXPS Call agent ID ONLY - exclude Medex and other apps
+            const CAREXPS_CALL_AGENT_ID = 'agent_447a1b9da540237693b0440df6'
+            const allCalls = allCallsRaw.filter(call => call.agent_id === CAREXPS_CALL_AGENT_ID)
+            console.log(`🔒 Dashboard filtering calls by CareXPS agent: ${CAREXPS_CALL_AGENT_ID}`)
+            console.log(`🔍 Dashboard: ${allCalls.length} total CareXPS calls (all time)`)
 
             // Debug: Check timestamp format of first few calls
             if (allCalls.length > 0) {
@@ -931,12 +946,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
 
             return {
               calls: filteredCalls,
+              allCalls: allCalls, // Store all calls for Universal Search
               pagination_key: undefined,
               has_more: false
             }
           } catch (error) {
             console.error('Failed to fetch calls:', error)
-            return { calls: [], pagination_key: undefined, has_more: false }
+            return { calls: [], allCalls: [], pagination_key: undefined, has_more: false }
           }
         })(),
 
@@ -975,14 +991,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
 
         console.log(`🔒 Dashboard filtering SMS chats by CareXPS agent: ${SMS_AGENT_ID}`)
 
-        // Filter chats by date range AND SMS agent like SMS page does
-        const filteredChats = allChatsResponse.chats.filter(chat => {
-          // CRITICAL: Always filter by CareXPS SMS agent ID - exclude Medex and other apps
-          if (chat.agent_id !== SMS_AGENT_ID) {
-            console.log(`🚫 Excluding chat ${chat.chat_id} from agent ${chat.agent_id} (not CareXPS SMS agent)`)
-            return false
-          }
+        // First, filter ALL chats by agent ID only (for Universal Search)
+        const allAgentFilteredChats = allChatsResponse.chats.filter(chat => {
+          return chat.agent_id === SMS_AGENT_ID
+        })
 
+        console.log(`🔍 Dashboard: ${allAgentFilteredChats.length} total CareXPS chats (all time)`)
+
+        // Then, filter chats by date range AND SMS agent like SMS page does
+        const filteredChats = allAgentFilteredChats.filter(chat => {
           // Check if timestamp is in seconds (10 digits) or milliseconds (13+ digits)
           let chatTimeMs: number
           const timestampStr = chat.start_timestamp.toString()
@@ -1022,12 +1039,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
 
         chatsResponse = {
           chats: filteredChats,
+          allChats: allAgentFilteredChats, // Store all agent-filtered chats for Universal Search
           pagination_key: undefined,
           has_more: false
         }
       } catch (error) {
         console.error('Failed to fetch chats (continuing without chat data):', error)
-        chatsResponse = { chats: [], pagination_key: undefined, has_more: false }
+        chatsResponse = { chats: [], allChats: [], pagination_key: undefined, has_more: false }
       }
 
       // Calculate metrics
@@ -1082,6 +1100,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
       // Store filtered chats for cost recalculation and metrics
       setFilteredChatsForCosts(filteredChats)
       setAllFilteredChats(filteredChats)
+
+      // Store calls and chats for Universal Search
+      // Store both date-filtered data (for display) and all-time data (for universal search)
+      setDashboardCalls(callsResponse.calls)
+      setDashboardChats(filteredChats)
+      setAllDashboardCalls(callsResponse.allCalls || callsResponse.calls) // Fallback to date-filtered if allCalls not available
+      setAllDashboardChats(chatsResponse.allChats || filteredChats) // Fallback to date-filtered if allChats not available
+
+      console.log('🔍 [UNIVERSAL SEARCH FIX] Stored data:', {
+        dateFilteredCalls: callsResponse.calls.length,
+        allCalls: (callsResponse.allCalls || callsResponse.calls).length,
+        dateFilteredChats: filteredChats.length,
+        allChats: (chatsResponse.allChats || filteredChats).length
+      })
 
       // Segment loading is now handled by auto-loading useEffect
       // Manual call removed - auto-loading triggers after allFilteredChats updates
@@ -1507,6 +1539,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user }) => {
           </div>
         </div>
       )}
+
+      {/* Universal Search */}
+      {/* Use ALL data (not date-filtered) for true universal search across all time */}
+      <UniversalSearch
+        calls={allDashboardCalls}
+        chats={allDashboardChats}
+        isLoading={isLoading || isLoadingSegments || isPreparingSegments}
+        onCallsRefresh={fetchDashboardData}
+        onChatsRefresh={fetchDashboardData}
+      />
 
       {/* Combined Service Cost Card */}
       <div className="mb-6">
