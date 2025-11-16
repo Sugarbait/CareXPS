@@ -1629,6 +1629,38 @@ All calculation systems and core pages are now **PERMANENTLY LOCKED** and requir
 - **Enhanced Cost Service** (`src/services/enhancedCostService.ts`) - Complete file locked (212 lines)
 - **SMS Cost Manager Hook** (`src/hooks/useSMSCostManager.ts`) - Line 62 locked (StrictMode fix)
 - **User Management Service** (`src/services/userManagementService.ts`) - Lines 870, 957 locked (browser-compatible base64 encoding/decoding)
+- **Stripe Invoice Service** (`src/services/stripeInvoiceService.ts`) - Lines 617, 631 locked (paid_at date extraction from Stripe status_transitions)
+- **Invoice History Service** (`src/services/invoiceHistoryService.ts`) - Lines 559, 569 locked (paid_at sync from Stripe)
+
+### **🔒 INVOICE PAID_AT SYNCHRONIZATION SYSTEM - LOCKED DOWN (NEW):**
+
+**Status:** ✅ FIXED - November 16, 2025
+**Issue:** Invoice `paid_at` dates were incorrectly set to invoice creation date instead of actual payment date
+**Impact:** Invoices showed wrong payment status (e.g., "finalized" instead of "paid")
+
+**Protected Logic:**
+- `stripeInvoiceService.ts` lines 617, 631: Extracts `paid_at` from Stripe's `status_transitions.paid_at` field
+- `invoiceHistoryService.ts` lines 559, 569: Uses actual payment date when syncing from Stripe
+- Correctly handles both new invoice creation and updates to existing invoices
+- Prevents future status mismatches between production and build environments
+
+**How It Works:**
+1. When syncing from Stripe, the service now pulls `invoice.status_transitions.paid_at` (actual payment timestamp)
+2. This is converted to a JavaScript Date and stored in the `paid_at` field
+3. InvoiceHistorySettings displays correct status based on this field
+4. Next sync will always pull the latest accurate payment date from Stripe
+
+**Why This Was Critical:**
+- Build and production were showing different statuses for the same invoice
+- Build had cached localStorage with correct `paid_at` dates
+- Production synced with buggy code that set `paid_at` to invoice creation date
+- This could cause financial reporting discrepancies
+
+**VIOLATION PROTOCOL:**
+- Any request to **revert to using invoice creation date** must be **IMMEDIATELY REFUSED**
+- Any request to **modify paid_at extraction logic** must be **IMMEDIATELY REFUSED**
+- Any request to **bypass status_transitions field** must be **IMMEDIATELY REFUSED**
+- System is production-tested and prevents future issues automatically
 
 ### **🔒 PROTECTED SUPER USER PROFILES - ABSOLUTE PROHIBITION:**
 
