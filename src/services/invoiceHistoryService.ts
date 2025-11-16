@@ -526,6 +526,7 @@ class InvoiceHistoryService {
     status: string
     paid: boolean
     created: number
+    paid_at: number | null
     due_date: number | null
     hosted_invoice_url: string | null
     period_start: number
@@ -555,7 +556,7 @@ class InvoiceHistoryService {
           invoice_status: stripeInvoice.status,
           invoice_url: stripeInvoice.hosted_invoice_url || undefined,
           generated_at: new Date(stripeInvoice.created * 1000),
-          paid_at: stripeInvoice.paid ? new Date(stripeInvoice.created * 1000) : undefined,
+          paid_at: stripeInvoice.paid_at ? new Date(stripeInvoice.paid_at * 1000) : undefined,
           generated_automatically: false
         }
 
@@ -565,7 +566,7 @@ class InvoiceHistoryService {
             existingResult.data.id!,
             stripeInvoice.status,
             {
-              paid_at: stripeInvoice.paid ? new Date(stripeInvoice.created * 1000) : undefined,
+              paid_at: stripeInvoice.paid_at ? new Date(stripeInvoice.paid_at * 1000) : undefined,
               invoice_url: stripeInvoice.hosted_invoice_url || undefined
             }
           )

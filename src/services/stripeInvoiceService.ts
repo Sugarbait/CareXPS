@@ -562,6 +562,7 @@ class StripeInvoiceService {
       status: string
       paid: boolean
       created: number
+      paid_at: number | null
       due_date: number | null
       hosted_invoice_url: string | null
       invoice_pdf: string | null
@@ -612,6 +613,8 @@ class StripeInvoiceService {
       // Map Stripe invoices to our format
       const mappedInvoices = invoices.data.map(invoice => {
         const customer = invoice.customer as any
+        // Get actual payment date from Stripe's status_transitions
+        const paidAt = invoice.status_transitions?.paid_at || null
 
         return {
           id: invoice.id,
@@ -625,6 +628,7 @@ class StripeInvoiceService {
           status: invoice.status || 'draft',
           paid: invoice.paid || false,
           created: invoice.created,
+          paid_at: paidAt, // Use actual payment timestamp from Stripe
           due_date: invoice.due_date,
           hosted_invoice_url: invoice.hosted_invoice_url,
           invoice_pdf: invoice.invoice_pdf,
